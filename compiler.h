@@ -1,8 +1,8 @@
 #pragma once
 
-#include <tvm/tvm.h>
-#include <torch/csrc/jit/ir.h>
 #include <torch/csrc/jit/argument_spec.h>
+#include <torch/csrc/jit/ir.h>
+#include <tvm/tvm.h>
 
 struct TVMObject {
   tvm::PackedFunc kernel;
@@ -16,5 +16,3 @@ struct TVMCompiler {
   std::shared_ptr<torch::jit::Graph> subgraph_;
   std::unordered_map<torch::jit::CompleteArgumentSpec, TVMObject> cache_;
 };
-
-

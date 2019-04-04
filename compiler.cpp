@@ -9,12 +9,6 @@
 
 using namespace torch::jit;
 
-tvm::relay::Expr createValues(Node* node, tvm::Array<tvm::relay::Expr> inputs) {
-  auto op = getOperator(node);
-  auto out = tvm::relay::CallNode::make(op, inputs, tvm::Attrs(), {});
-  return out;
-}
-
 tvm::relay::Function convertToRelay(std::shared_ptr<Graph> subgraph) {
   auto normalized = torch::jit::fuser::normalizeGraphForCache(subgraph);
   auto key = torch::jit::fuser::store(normalized);
@@ -59,7 +53,7 @@ tvm::relay::Function convertToRelay(std::shared_ptr<Graph> subgraph) {
         }
         // TODO handle multiple outputs
         AT_ASSERT(use.user->outputs().size() == 1);
-        value_map[use.user->output()] = createValues(use.user, relay_inputs);
+        value_map[use.user->output()] = getOperator(use.user, relay_inputs);
         new_frontier.emplace_back(use.user->output());
       }
     }

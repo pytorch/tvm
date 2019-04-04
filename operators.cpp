@@ -29,11 +29,21 @@ RegisterTVMOperatorSchedule::RegisterTVMOperatorSchedule(
   }
 }
 
-RegisterTVMOperator reg({{Symbol::fromQualString("aten::add"),
-                          [](Node* n) { return tvm::relay::Op::Get("add"); }},
-                         {Symbol::fromQualString("aten::mul"), [](Node* n) {
-                            return tvm::relay::Op::Get("multiply");
-                          }}});
+RegisterTVMOperator reg({
+    {Symbol::fromQualString("aten::add"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       auto op = tvm::relay::Op::Get("add");
+       AT_ASSERT(inputs.size() == 2);
+       auto out = tvm::relay::CallNode::make(op, inputs, tvm::Attrs(), {});
+       return out;
+     }},
+    {Symbol::fromQualString("aten::mul"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       auto op = tvm::relay::Op::Get("multiply");
+       auto out = tvm::relay::CallNode::make(op, inputs, tvm::Attrs(), {});
+       return out;
+     }},
+});
 
 RegisterTVMOperatorSchedule reg_sched(
     {{"add",
@@ -49,7 +59,7 @@ bool isSupported(Node* node) {
   return map.find(node->kind()) != map.end();
 }
 
-tvm::relay::Op getOperator(Node* node) {
+tvm::relay::Expr getOperator(Node* node, tvm::Array<tvm::relay::Expr> inputs) {
   AT_ASSERT(isSupported(node));
-  return getTVMOperatorMap()[node->kind()](node);
+  return getTVMOperatorMap()[node->kind()](node, inputs);
 }
