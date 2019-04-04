@@ -1,8 +1,28 @@
-import torch, torch_tvm
+import time
+
+import torch
 
 @torch.jit.script
-def foo(x, y):
-  return x + y
+def foo(x, y, z):
+  return x * y * z
 
-if __name__ == "__main__":
-  print(foo(torch.rand(3), torch.rand(3)))
+size = 1000
+
+x = torch.rand(size)
+t = time.time()
+for _ in range(1000):
+  x = foo(x, x, x)
+print("regular", time.time() - t)
+
+import torch_tvm
+
+@torch.jit.script
+def foo(x, y, z):
+  return x * y * z
+
+x = torch.rand(size)
+t = time.time()
+for _ in range(1000):
+  x = foo(x, x, x)
+print("TVM", time.time() - t)
+
