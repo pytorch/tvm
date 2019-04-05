@@ -35,4 +35,6 @@ PYTHONPATH=build python test.py
 ## TODO
 
 - Add ability to register translations from opaque op names to TVM (as is done in `operator.cpp`) from Python.
-- Zero copy `set_input`
+- Zero copy `set_input`.
+- Threadpool
+- Allocator
