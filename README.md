@@ -30,3 +30,9 @@ PYTHONPATH=build python test.py
 - `register.cpp`: Sets up pybind bindings and invokes the registration of a TVM backend.
 - `compiler.{h,cpp}`: Main logic to compile a PyTorch JIT graph with TVM.
 - `operators.{h,cpp}`: Location of mapping from JIT IR to TVM operators.
+
+
+## TODO
+
+- Add ability to register translations from opaque op names to TVM (as is done in `operator.cpp`) from Python.
+- Zero copy `set_input`
