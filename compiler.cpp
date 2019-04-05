@@ -2,14 +2,46 @@
 #include "operators.h"
 
 #include <ATen/DLConvertor.h>
+#include <torch/csrc/jit/constants.h>
 #include <torch/csrc/jit/fuser/kernel_cache.h>
-#include <tvm/relay/expr.h>
-#include <tvm/relay/op.h>
-#include <tvm/relay/pass.h>
 
 using namespace torch::jit;
 
-tvm::relay::Function convertToRelay(std::shared_ptr<Graph> subgraph) {
+tvm::relay::Expr TVMCompiler::convertToRelay(const Value* val) {
+  if (val->isCompleteTensor()) {
+    auto pt_t = val->type()->cast<CompleteTensorType>();
+    tvm::Array<HalideIR::Expr> sizes;
+    for (const auto& size : pt_t->sizes()) {
+      sizes.push_back(HalideIR::Expr(size));
+    }
+    // TODO: support non-float tensors
+    auto t = tvm::relay::TensorTypeNode::make(sizes, ::tvm::Float(32));
+    auto v = tvm::relay::VarNode::make(val->uniqueName(), t);
+    return v;
+  }
+  AT_ASSERT(0);
+}
+
+tvm::relay::Expr TVMCompiler::convertToRelay(const IValue& val) {
+  if (val.isDouble()) {
+    auto x = tvm::runtime::NDArray::Empty(
+        {}, tvm::runtime::String2TVMType("float32"), ctx_);
+    reinterpret_cast<float*>(x->data)[0] = val.toDouble();
+    auto v = tvm::relay::ConstantNode::make(x);
+    return v;
+  }
+  if (val.isInt()) {
+    auto x = tvm::runtime::NDArray::Empty(
+        {}, tvm::runtime::String2TVMType("int32"), ctx_);
+    reinterpret_cast<int32_t*>(x->data)[0] = val.toInt();
+    auto v = tvm::relay::ConstantNode::make(x);
+    return v;
+  }
+  AT_ASSERT(0);
+}
+
+tvm::relay::Function TVMCompiler::convertToRelay(
+    std::shared_ptr<Graph> subgraph) {
   auto normalized = torch::jit::fuser::normalizeGraphForCache(subgraph);
   auto key = torch::jit::fuser::store(normalized);
   auto f = torch::jit::fuser::retrieve(key);
@@ -17,14 +49,7 @@ tvm::relay::Function convertToRelay(std::shared_ptr<Graph> subgraph) {
 
   for (const auto& input : subgraph->inputs()) {
     AT_ASSERT(input->isCompleteTensor());
-    auto pt_t = input->type()->cast<CompleteTensorType>();
-    tvm::Array<HalideIR::Expr> sizes;
-    for (const auto& size : pt_t->sizes()) {
-      sizes.push_back(HalideIR::Expr(size));
-    }
-    // TODO: support non-float inputs
-    auto t = tvm::relay::TensorTypeNode::make(sizes, ::tvm::Float(32));
-    auto v = tvm::relay::VarNode::make(input->uniqueName(), t);
+    auto v = convertToRelay(input);
     value_map[input] = v;
   }
 
@@ -39,8 +64,14 @@ tvm::relay::Function convertToRelay(std::shared_ptr<Graph> subgraph) {
         auto skip_user = false;
         for (const auto& input : use.user->inputs()) {
           if (value_map.find(input) == value_map.end()) {
-            skip_user = true;
-            break;
+            // We may be dealing with a constant, handle that here
+            auto optional_ivalue = toIValue(input);
+            if (!optional_ivalue.has_value()) {
+              skip_user = true;
+              break;
+            } else {
+              value_map[input] = convertToRelay(optional_ivalue.value());
+            }
           }
           relay_inputs.push_back(value_map[input]);
         }
@@ -71,6 +102,9 @@ tvm::relay::Function convertToRelay(std::shared_ptr<Graph> subgraph) {
 }
 
 TVMCompiler::TVMCompiler(const Node* node) {
+  // TODO support gpu
+  ctx_.device_type = kDLCPU;
+  ctx_.device_id = 0;
   subgraph_ = node->g(attr::Subgraph);
 }
 
@@ -97,17 +131,13 @@ void TVMCompiler::run(Stack& stack) {
     auto build_f = build_mod.GetFunction("build", false);
     auto json_f = build_mod.GetFunction("get_graph_json", false);
     auto mod_f = build_mod.GetFunction("get_module", false);
-    build_f(func, "llvm", "llvm");
+    build_f(func, "llvm", "llvm -mcpu=core-avx2");
     std::string json = json_f();
     tvm::runtime::Module mod = mod_f();
-    // TODO support gpu
-    TVMContext cpu_ctx;
-    cpu_ctx.device_type = kDLCPU;
-    cpu_ctx.device_id = 0;
     auto pfr = tvm::runtime::Registry::Get("tvm.graph_runtime.create");
     AT_ASSERT(pfr);
     tvm::runtime::Module run_mod =
-        (*pfr)(json, mod, (int)cpu_ctx.device_type, (int)cpu_ctx.device_id);
+        (*pfr)(json, mod, (int)ctx_.device_type, (int)ctx_.device_id);
     cache_[spec].set_input = run_mod.GetFunction("set_input", false);
     cache_[spec].kernel = run_mod.GetFunction("run", false);
     cache_[spec].get_output = run_mod.GetFunction("get_output", false);
