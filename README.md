@@ -10,6 +10,16 @@ git checkout tvm_dev
 python setup.py install
 ```
 
+You'll also need the facebookexperimental copy of TVM:
+```
+git clone https://github.com/facebookexperimental/tvm.git --recursive
+cd tvm
+mkdir build && cd build
+# Be sure to build with -DINSTALL_DEV=ON
+LLVM_DIR=/home/bwasti/llvm_build/install/lib/cmake/llvm cmake .. -DCMAKE_INSTALL_PREFIX:PATH=. -DINSTALL_DEV=ON -DUSE_LLVM=/home/bwasti/llvm_build/install/bin/llvm-config -GNinja
+ninja install
+```
+
 Then, you'll need to build this repo seperately
 ```
 cd pytorch_tvm
