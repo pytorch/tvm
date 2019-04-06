@@ -12,7 +12,7 @@
 namespace py = pybind11;
 using namespace torch::jit;
 
-PYBIND11_MODULE(torch_tvm, m) {
+PYBIND11_MODULE(_torch_tvm, m) {
   auto tvm_sym = Symbol::fromQualString("tvm::CompilationGroup");
 
   // Register the tvm::CompilationGroup operator

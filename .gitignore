@@ -1,2 +1,7 @@
 build/
 compile_commands.json
+*.egg-info
+*.pyc
+__pycache__
+*.so
+*.a
