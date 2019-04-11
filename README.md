@@ -40,6 +40,7 @@ PYTHONPATH=build python test.py
 - `compiler.{h,cpp}`: Main logic to compile a PyTorch JIT graph with TVM.
 - `operators.{h,cpp}`: Location of mapping from JIT IR to TVM operators.
 
+![TVM Integration](https://github.com/pytorch/tvm/blob/master/pt_execution.png?raw=true)
 
 ## TODO
 
