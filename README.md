@@ -47,3 +47,16 @@ PYTHONPATH=build python test.py
 - Zero copy `set_input`.
 - Threadpool
 - Allocator
+- Operator translation
+  - [x] Add
+  - [x] Multiply
+  - [ ] Convolution
+  - [ ] BatchNorm
+  - [ ] Relu
+  - [ ] AveragePool
+  - [ ] MaxPool
+  - [ ] Linear
+- Tensor manipulation
+  - [ ] Reshape
+  - [ ] Views
+
