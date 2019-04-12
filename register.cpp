@@ -15,7 +15,7 @@ PYBIND11_MODULE(torch_tvm, m) {
   auto tvm_sym = Symbol::fromQualString("tvm::CompilationGroup");
 
   // Register the tvm::CompilationGroup operator
-  auto options = OperatorOptions().aliasAnalysis(AliasAnalysisKind::EXTRACTOR);
+  auto options = OperatorOptions().aliasAnalysis(AliasAnalysisKind::PURE);
   RegisterOperators op({Operator(
       tvm_sym,
       [](const Node* node) {
@@ -30,9 +30,7 @@ PYBIND11_MODULE(torch_tvm, m) {
   // Register the pass that fuses parts of the graph into
   // a tvm::CompilationGroup
   RegisterPass pass([tvm_sym](std::shared_ptr<Graph>& g) {
-    overrideCanFuseOnCPU(true);
     CustomFuseGraph(g, isSupported, tvm_sym);
-    overrideCanFuseOnCPU(false);
   });
 
   m.doc() = "This module does nothing but register a TVM backend.";
