@@ -24,14 +24,15 @@ Then, you'll need to build this repo seperately
 ```
 cd pytorch_tvm
 mkdir build && cd build
-PYTORCH_DIR=/data/users/bwasti/pytorch/torch TVM_DIR=/home/bwasti/local/tvm/build cmake .. -DPYTHON_EXECUTABLE=$(which python) -GNinja && ninja
+cmake .. -DPYTORCH_DIR=/data/users/bwasti/pytorch/torch -DTVM_DIR=/home/bwasti/local/tvm/build -DPYTHON_EXECUTABLE=$(which python) -GNinja
+ninja
 cd ..
 ```
 
 ## Test
 
 ```
-PYTHONPATH=build python test.py
+PYTHONPATH=build python test/test.py
 ```
 
 ## Code Layout
