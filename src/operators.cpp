@@ -60,7 +60,17 @@ RegisterTVMOperatorSchedule reg_sched(
         return tvm::runtime::Registry::Get("topi.generic.schedule_injective");
       }}});
 
+
+// flag to control whether to enable tvm fusion, default to false
+static bool tvm_fusion = false;
+
+void setTVMFusion(bool flag) {
+  tvm_fusion = flag;
+}
+
 bool isSupported(Node* node) {
+  if (!tvm_fusion)
+    return false;
   auto map = getTVMOperatorMap();
   return map.find(node->kind()) != map.end();
 }

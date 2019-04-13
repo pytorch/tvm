@@ -33,5 +33,13 @@ PYBIND11_MODULE(torch_tvm, m) {
     CustomFuseGraph(g, isSupported, tvm_sym);
   });
 
+  // python API to enable and disable tvm fusion
+  m.def("enable_tvm_fusion", [](){
+      setTVMFusion(true);
+  });
+  m.def("disable_tvm_fusion", [](){
+      setTVMFusion(false);
+  });
+
   m.doc() = "This module does nothing but register a TVM backend.";
 }
