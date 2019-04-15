@@ -4,12 +4,13 @@ import torch
 
 @torch.jit.script
 def foo(a, b, c):
+  c = a * b + c
   return a * b + c
 
 size = 100000
-runs = 1000
+runs = 100
 print("{} runs of size {}".format(runs, size))
-seed = torch.rand(size) / runs
+seed = torch.rand(size) / runs / 2
 
 x = seed
 t = time.time()
@@ -21,6 +22,7 @@ import torch_tvm
 
 @torch.jit.script
 def foo(a, b, c):
+  c = a * b + c
   return a * b + c
 
 y = seed
