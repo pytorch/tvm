@@ -4,7 +4,7 @@
 #include <tvm/relay/op.h>
 #include <tvm/tvm.h>
 
-void setTVMFusion(bool flag);
+void setEnabled(bool flag);
 bool isSupported(torch::jit::Node* node);
 tvm::relay::Expr getOperator(
     torch::jit::Node* node,

@@ -34,11 +34,11 @@ PYBIND11_MODULE(torch_tvm, m) {
   });
 
   // python API to enable and disable tvm fusion
-  m.def("enable_tvm_fusion", [](){
-      setTVMFusion(true);
+  m.def("enable", [](){
+      setEnabled(true);
   });
-  m.def("disable_tvm_fusion", [](){
-      setTVMFusion(false);
+  m.def("disable", [](){
+      setEnabled(false);
   });
 
   m.doc() = "This module does nothing but register a TVM backend.";

@@ -109,11 +109,11 @@ class TestOperators(TestCase):
         jit_time = time.time() - jit_start
 
         # jit the function and lower to TVM
-        torch_tvm.enable_tvm_fusion()
+        torch_tvm.enable()
         trace_tvm = torch.jit.trace(func, input_tensors)
         # tvm compile the graph
         _ = trace_tvm(*input_tensors)
-        torch_tvm.disable_tvm_fusion()
+        torch_tvm.disable()
         # timeit the perf
         tvm_start = time.time()
         for _ in range(runs):
