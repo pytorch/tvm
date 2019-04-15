@@ -14,7 +14,6 @@ class TestCase(unittest.TestCase):
     def __init__(self, method_name='runTest'):
         super(TestCase, self).__init__(method_name)
 
-
     def __assertTensorsEqual(self, a, b, prec=None, message="", allow_inf=False):
         super(TestCase, self).assertEqual(a.size(), b.size(), message)
         if a.numel() > 0:
@@ -123,8 +122,8 @@ class TestOperators(TestCase):
 
         if verbose:
             print("\noperator " + func.__name__ + ":\t{} runs of size {}".format(runs, size)
-                  + "\tjit time \t{:.4f}s".format(jit_time)
-                  + "\ttvm time \t{:.4f}s".format(tvm_time))
+                  + " \tjit time:{:.4f}s".format(jit_time)
+                  + "\ttvm time:{:.4f}s".format(tvm_time))
         self.assertEqual(outputs_jit, outputs_tvm)
 
     def test_add(self):
@@ -142,4 +141,3 @@ class TestOperators(TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

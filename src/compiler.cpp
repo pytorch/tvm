@@ -42,9 +42,6 @@ tvm::relay::Expr TVMCompiler::convertToRelay(const IValue& val) {
 
 tvm::relay::Function TVMCompiler::convertToRelay(
     std::shared_ptr<Graph> subgraph) {
-  auto normalized = torch::jit::fuser::normalizeGraphForCache(subgraph);
-  auto key = torch::jit::fuser::store(normalized);
-  auto f = torch::jit::fuser::retrieve(key);
   std::unordered_map<Value*, tvm::relay::Expr> value_map;
 
   for (const auto& input : subgraph->inputs()) {
@@ -143,18 +140,17 @@ void TVMCompiler::run(Stack& stack) {
     cache_[spec].get_output = run_mod.GetFunction("get_output", false);
   }
 
-  int i = 0;
+  int i = inputs.size();
   for (const auto& input : inputs) {
     auto tensor = input.toTensor();
     auto dl_tensor = at::toDLPack(tensor);
-    cache_[spec].set_input(i++, tvm::runtime::NDArray::FromDLPack(dl_tensor));
+    cache_[spec].set_input(--i, tvm::runtime::NDArray::FromDLPack(dl_tensor));
   }
   cache_[spec].kernel();
   i = 0;
   for (const auto& output : subgraph_->outputs()) {
     tvm::runtime::NDArray ret_val = cache_[spec].get_output(i++);
     auto dl_tensor = ret_val.ToDLPack();
-    auto d = (float*)dl_tensor->dl_tensor.data;
     auto tensor = at::fromDLPack(dl_tensor);
     auto var = torch::autograd::make_variable(tensor);
     stack.push_back(IValue(var));
