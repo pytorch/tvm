@@ -121,10 +121,12 @@ class TestOperators(TestCase):
         # jit the function and lower to TVM
         torch_tvm.enable()
         trace_tvm = torch.jit.trace(func, input_tensors)
+        tvm_unused = "TVM was not able to optimize this trace."
+        assert "tvm::CompilationGroup" in str(trace_tvm.graph_for(*input_tensors)), tvm_unused
         # tvm compile the graph and ensure TVM is used
         with profile() as p:
             _ = trace_tvm(*input_tensors)
-        assert "TVM" in [_.name for _ in p.function_events], "TVM was not able to optimize this trace."
+        assert "TVM" in [_.name for _ in p.function_events], tvm_unused
         torch_tvm.disable()
         # timeit the perf
         tvm_start = time.time()
