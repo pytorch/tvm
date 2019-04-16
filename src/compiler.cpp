@@ -7,7 +7,7 @@
 
 using namespace torch::jit;
 
-tvm::relay::Expr TVMCompiler::convertToRelay(const Value* val) {
+tvm::relay::Var TVMCompiler::convertToRelay(const Value* val) {
   if (val->isCompleteTensor()) {
     auto pt_t = val->type()->cast<CompleteTensorType>();
     tvm::Array<HalideIR::Expr> sizes;
@@ -37,16 +37,38 @@ tvm::relay::Expr TVMCompiler::convertToRelay(const IValue& val) {
     auto v = tvm::relay::ConstantNode::make(x);
     return v;
   }
-  AT_ASSERT(0);
+  // TODO Add None type to Relay
+  if (val.isNone()) {
+    auto x = tvm::runtime::NDArray::Empty(
+        {}, tvm::runtime::String2TVMType("int32"), ctx_);
+    reinterpret_cast<int32_t*>(x->data)[0] = 0;
+    auto v = tvm::relay::ConstantNode::make(x);
+    return v;
+  }
+  if (val.isIntList()) {
+    tvm::Array<tvm::relay::Expr> tuple_elems;
+    for (const auto& elem : val.toIntList()->elements()) {
+      auto x = tvm::runtime::NDArray::Empty(
+          {}, tvm::runtime::String2TVMType("int32"), ctx_);
+      reinterpret_cast<int32_t*>(x->data)[0] = elem;
+      auto v = tvm::relay::ConstantNode::make(x);
+      tuple_elems.push_back(v);
+    }
+    return tvm::relay::TupleNode::make(tuple_elems);
+  }
+  AT_CHECK(
+      0, "Cannot convert value ", val, " to Relay yet.  Please file a bug.\n");
 }
 
 tvm::relay::Function TVMCompiler::convertToRelay(
     std::shared_ptr<Graph> subgraph) {
   std::unordered_map<Value*, tvm::relay::Expr> value_map;
+  tvm::Array<tvm::relay::Var> input_vars;
 
   for (const auto& input : subgraph->inputs()) {
     AT_ASSERT(input->isCompleteTensor());
     auto v = convertToRelay(input);
+    input_vars.push_back(v);
     value_map[input] = v;
   }
 
@@ -91,11 +113,12 @@ tvm::relay::Function TVMCompiler::convertToRelay(
   AT_ASSERT(subgraph->outputs().size() == 1);
   auto output = subgraph->outputs().at(0);
   AT_ASSERT(value_map.find(output) != value_map.end());
+  tvm::Array<tvm::relay::Var> free_vars =
+      tvm::relay::FreeVars(value_map[output]);
+  AT_ASSERT(free_vars.size() == input_vars.size());
+
   return tvm::relay::FunctionNode::make(
-      tvm::relay::FreeVars(value_map[output]),
-      value_map[output],
-      tvm::relay::Type(),
-      {});
+      input_vars, value_map[output], tvm::relay::Type(), {});
 }
 
 TVMCompiler::TVMCompiler(const Node* node) {
@@ -106,20 +129,25 @@ TVMCompiler::TVMCompiler(const Node* node) {
 }
 
 void TVMCompiler::run(Stack& stack) {
+  std::unordered_map<Value*, IValue*> value_to_ivalue;
   std::vector<IValue> inputs;
+
+  // Reverse the stack
   for (const auto& input : subgraph_->inputs()) {
-    inputs.emplace_back(stack.back());
+    inputs.emplace(inputs.begin(), stack.back());
     stack.pop_back();
+  }
+
+  for (auto i = 0; i < inputs.size(); ++i) {
+    auto value_input = subgraph_->inputs()[i];
+    value_to_ivalue[value_input] = &inputs[i];
   }
 
   CompleteArgumentSpec spec{false, ArrayRef<IValue>(inputs)};
 
   if (cache_.find(spec) == cache_.end()) {
-    for (auto i = 0; i < inputs.size(); ++i) {
-      auto ivalue_input = inputs[i];
-      auto value_input = subgraph_->inputs()[i];
-      AT_ASSERT(ivalue_input.isTensor());
-      value_input->inferTypeFrom(ivalue_input.toTensor());
+    for (auto& kv : value_to_ivalue) {
+      kv.first->inferTypeFrom(kv.second->toTensor());
     }
     auto func = convertToRelay(subgraph_);
     auto pfb = tvm::runtime::Registry::Get("relay.build_module._BuildModule");
@@ -140,14 +168,16 @@ void TVMCompiler::run(Stack& stack) {
     cache_[spec].get_output = run_mod.GetFunction("get_output", false);
   }
 
-  int i = inputs.size();
-  for (const auto& input : inputs) {
-    auto tensor = input.toTensor();
+  for (auto i = 0; i < subgraph_->inputs().size(); ++i) {
+    auto* ivalue = value_to_ivalue[subgraph_->inputs()[i]];
+    auto tensor = ivalue->toTensor();
     auto dl_tensor = at::toDLPack(tensor);
-    cache_[spec].set_input(--i, tvm::runtime::NDArray::FromDLPack(dl_tensor));
+    cache_[spec].set_input(i, tvm::runtime::NDArray::FromDLPack(dl_tensor));
   }
+
   cache_[spec].kernel();
-  i = 0;
+
+  int i = 0;
   for (const auto& output : subgraph_->outputs()) {
     tvm::runtime::NDArray ret_val = cache_[spec].get_output(i++);
     auto dl_tensor = ret_val.ToDLPack();
