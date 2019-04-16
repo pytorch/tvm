@@ -1,4 +1,5 @@
 #include <pybind11/pybind11.h>
+#include <torch/csrc/autograd/record_function.h>
 #include <torch/csrc/jit/custom_operator.h>
 #include <torch/csrc/jit/fuser/interface.h>
 #include <torch/csrc/jit/operator_options.h>
@@ -21,6 +22,7 @@ PYBIND11_MODULE(torch_tvm, m) {
       [](const Node* node) {
         auto cc = std::make_shared<TVMCompiler>(node);
         return [cc](Stack& stack) {
+          RECORD_FUNCTION("TVM", std::vector<c10::IValue>());
           cc->run(stack);
           return 0;
         };
