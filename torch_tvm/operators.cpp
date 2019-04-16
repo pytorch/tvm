@@ -52,6 +52,24 @@ RegisterTVMOperatorSchedule::RegisterTVMOperatorSchedule(
   }
 }
 
+template <typename T>
+T relayToConstant(tvm::relay::Expr e) {
+  auto c = e.as<tvm::relay::ConstantNode>();
+  AT_ASSERT(c->is_scalar());
+  return static_cast<T*>(c->data->data)[0];
+}
+
+
+tvm::Array<tvm::relay::IndexExpr> relayToIntList(tvm::relay::Expr e) {
+  auto t = e.as<tvm::relay::TupleNode>();
+  tvm::Array<tvm::relay::IndexExpr> elems;
+  for (auto c: t->fields) {
+    int elem = relayToConstant<int>(c);
+    elems.push_back(elem);
+  }
+  return elems;
+}
+
 RegisterTVMOperator reg({
     {Symbol::fromQualString("aten::add"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
@@ -67,21 +85,31 @@ RegisterTVMOperator reg({
        auto out = tvm::relay::CallNode::make(op, add_inputs, tvm::Attrs(), {});
        return out;
      }},
-    {Symbol::fromQualString("aten::conv2d"),
+    {Symbol::fromQualString("aten::_convolution"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
-       static const tvm::relay::Op& op = tvm::relay::Op::Get("nn.conv2d");
+       bool is_transpose = relayToConstant<bool>(inputs[6]);
+       // check the operator to emit base on is_transpose
+       auto op = tvm::relay::Op::Get("nn.conv2d");
+       if (is_transpose) {
+          op = tvm::relay::Op::Get("nn.conv2d_transpose");
+       }
+
+       // input and filter
        tvm::Array<tvm::relay::Expr> new_inputs = {
            inputs[0],
            inputs[1],
        };
+       // TODO: support passing bias to tvm
+
        auto conv_attrs = tvm::make_node<tvm::relay::Conv2DAttrs>();
-       conv_attrs->groups = 1;
+       conv_attrs->groups = relayToConstant<int>(inputs[8]);
        conv_attrs->data_layout = "NCHW";
        conv_attrs->kernel_layout = "OIHW";
-       conv_attrs->kernel_size = {3, 3};
-       conv_attrs->padding = {0, 0};
-       conv_attrs->strides = {1, 1};
-       conv_attrs->dilation = {1, 1};
+       // TODO: figure out kernel size usage in tvm
+       conv_attrs->kernel_size = tvm::NullValue<tvm::Array<tvm::relay::IndexExpr>>();
+       conv_attrs->strides = relayToIntList(inputs[3]);
+       conv_attrs->padding = relayToIntList(inputs[4]);
+       conv_attrs->dilation = relayToIntList(inputs[5]);
 
        auto out = tvm::relay::CallNode::make(
            op, new_inputs, tvm::Attrs(conv_attrs), {});
@@ -125,13 +153,16 @@ RegisterTVMOperator reg({
 });
 
 RegisterTVMOperatorSchedule reg_sched(
-    {{"add",
-      []() {
+    {{"add", []() {
         return tvm::runtime::Registry::Get("topi.generic.schedule_injective");
       }},
      {"multiply", []() {
         return tvm::runtime::Registry::Get("topi.generic.schedule_injective");
-      }}});
+      }},
+     {"conv2d", []() {
+        return tvm::runtime::Registry::Get("topi.generic.nn.schedule_conv2d_nchw");
+      }}
+    });
 
 
 // flag to control whether to enable tvm fusion, default to false
