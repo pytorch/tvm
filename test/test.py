@@ -5,6 +5,8 @@ from numbers import Number
 
 import torch
 import torch.nn.functional as F
+from torch.autograd.profiler import profile
+
 from tvm import relay # This registers all the schedules
 import torch_tvm
 
@@ -119,8 +121,10 @@ class TestOperators(TestCase):
         # jit the function and lower to TVM
         torch_tvm.enable()
         trace_tvm = torch.jit.trace(func, input_tensors)
-        # tvm compile the graph
-        _ = trace_tvm(*input_tensors)
+        # tvm compile the graph and ensure TVM is used
+        with profile() as p:
+            _ = trace_tvm(*input_tensors)
+        assert "TVM" in [_.name for _ in p.function_events], "TVM was not able to optimize this trace."
         torch_tvm.disable()
         # timeit the perf
         tvm_start = time.time()
