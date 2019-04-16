@@ -4,6 +4,8 @@ import numpy
 from numbers import Number
 
 import torch
+import torch.nn.functional as F
+from tvm import relay # This registers all the schedules
 import torch_tvm
 
 
@@ -92,11 +94,17 @@ class TestCase(unittest.TestCase):
 # test jit tvm operators
 class TestOperators(TestCase):
 
-    def checkTraceTVM(self, func, input_tensors=None, size=100000, runs=100, verbose=False):
+    def checkTraceTVM(self, func, input_tensors=None, input_shapes=None, size=100000, runs=100, verbose=False):
         # prepare inputs
         if input_tensors is None:
-            seed = torch.rand(size) / runs / 2
-            input_tensors = (seed, seed, seed)
+            if input_shapes is None:
+                seed = torch.rand(size) / runs / 2
+                input_tensors = (seed, seed, seed)
+            else:
+                input_tensors = []
+                for shape in input_shapes:
+                    seed = torch.rand(*shape) / runs / 2
+                    input_tensors.append(seed)
 
         # jit the function
         trace_jit = torch.jit.trace(func, input_tensors)
@@ -138,6 +146,11 @@ class TestOperators(TestCase):
 
         self.checkTraceTVM(mul, verbose=True)
 
+    def test_conv(self):
+        def conv(a, b, c):
+            return F.conv2d(a, b) + c
+
+        self.checkTraceTVM(conv, input_shapes=[[20,16,10,10], [10,16,3,3], [20,10,8,8]], verbose=True)
 
 if __name__ == '__main__':
     unittest.main()

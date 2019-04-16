@@ -1,4 +1,5 @@
 #include "operators.h"
+#include <tvm/relay/attrs/nn.h>
 
 using namespace torch::jit;
 
@@ -48,7 +49,7 @@ RegisterTVMOperator reg({
     {Symbol::fromQualString("aten::add"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("add");
-       registerSchedule("add");
+       // registerSchedule("add");
        AT_ASSERT(inputs.size() == 3);
        tvm::Array<tvm::relay::Expr> add_inputs = {inputs[0], inputs[1]};
        // Handle pytorch's value argument in add
@@ -59,10 +60,30 @@ RegisterTVMOperator reg({
        auto out = tvm::relay::CallNode::make(op, add_inputs, tvm::Attrs(), {});
        return out;
      }},
+    {Symbol::fromQualString("aten::conv2d"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       static const tvm::relay::Op& op = tvm::relay::Op::Get("nn.conv2d");
+       tvm::Array<tvm::relay::Expr> new_inputs = {
+           inputs[0],
+           inputs[1],
+       };
+       auto conv_attrs = tvm::make_node<tvm::relay::Conv2DAttrs>();
+       conv_attrs->groups = 1;
+       conv_attrs->data_layout = "NCHW";
+       conv_attrs->kernel_layout = "OIHW";
+       conv_attrs->kernel_size = {3, 3};
+       conv_attrs->padding = {0, 0};
+       conv_attrs->strides = {1, 1};
+       conv_attrs->dilation = {1, 1};
+
+       auto out = tvm::relay::CallNode::make(
+           op, new_inputs, tvm::Attrs(conv_attrs), {});
+       return out;
+     }},
     {Symbol::fromQualString("aten::mul"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("multiply");
-       registerSchedule("multiply");
+       // registerSchedule("multiply");
        auto out = tvm::relay::CallNode::make(op, inputs, tvm::Attrs(), {});
        return out;
      }},
