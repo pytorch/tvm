@@ -1,15 +1,13 @@
 import time
-import unittest
 import numpy
 from numbers import Number
+import unittest
 
 import torch
-import torch.nn.functional as F
 from torch.autograd.profiler import profile
 
 from tvm import relay # This registers all the schedules
 import torch_tvm
-
 
 # base TestCase class
 class TestCase(unittest.TestCase):
@@ -92,10 +90,6 @@ class TestCase(unittest.TestCase):
         else:
             super(TestCase, self).assertEqual(x, y, message)
 
-
-# test jit tvm operators
-class TestOperators(TestCase):
-
     def checkTraceTVM(self, func, input_tensors=None, input_shapes=None, size=100000, runs=100, verbose=False):
         # prepare inputs
         if input_tensors is None:
@@ -139,24 +133,3 @@ class TestOperators(TestCase):
                   + " \tjit time:{:.4f}s".format(jit_time)
                   + "\ttvm time:{:.4f}s".format(tvm_time))
         self.assertEqual(outputs_jit, outputs_tvm)
-
-    def test_add(self):
-        def add(a, b, c):
-          return a + b + c
-
-        self.checkTraceTVM(add, verbose=True)
-
-    def test_mul(self):
-        def mul(a, b, c):
-            return a * b * c
-
-        self.checkTraceTVM(mul, verbose=True)
-
-    def test_conv(self):
-        def conv(a, b, c):
-            return F.conv2d(a, b) + c
-
-        self.checkTraceTVM(conv, input_shapes=[[20,16,10,10], [10,16,3,3], [20,10,8,8]], verbose=True)
-
-if __name__ == '__main__':
-    unittest.main()
