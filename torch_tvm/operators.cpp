@@ -36,6 +36,13 @@ void registerSchedule(std::string name) {
   }
 }
 
+template <typename T>
+T relayToConstant(tvm::relay::Expr e) {
+  auto c = e.as<tvm::relay::ConstantNode>();
+  AT_ASSERT(c->is_scalar());
+  return static_cast<T*>(c->data->data)[0];
+}
+
 RegisterTVMOperatorSchedule::RegisterTVMOperatorSchedule(
     std::vector<std::pair<std::string, TVMScheduleFunctor>> scheds) {
   for (const auto& pair : scheds) {
@@ -79,6 +86,34 @@ RegisterTVMOperator reg({
        auto out = tvm::relay::CallNode::make(
            op, new_inputs, tvm::Attrs(conv_attrs), {});
        return out;
+     }},
+    {Symbol::fromQualString("aten::batch_norm"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       auto op = tvm::relay::Op::Get("nn.batch_norm");
+
+       auto& broadcast = tvm::relay::Op::Get("broadcast_to_like");
+       tvm::Array<tvm::relay::Expr> bn_inputs = {
+           inputs[0],
+           tvm::relay::CallNode::make(
+               broadcast, {inputs[1], inputs[3]}, tvm::Attrs(), {}),
+           tvm::relay::CallNode::make(
+               broadcast, {inputs[1], inputs[3]}, tvm::Attrs(), {}),
+           inputs[3],
+           inputs[4],
+       };
+       auto attrs = tvm::make_node<tvm::relay::BatchNormAttrs>();
+       auto eps = relayToConstant<double>(inputs[7]);
+       attrs->epsilon = eps;
+       attrs->axis = 1;
+       // TODO handle gamma and beta correctly
+       attrs->center = false;
+       attrs->scale = false;
+       auto out =
+           tvm::relay::CallNode::make(op, bn_inputs, tvm::Attrs(attrs), {});
+       auto n = tvm::make_node<tvm::relay::TupleGetItemNode>();
+       n->tuple = std::move(out);
+       n->index = 0;
+       return tvm::relay::TupleGetItem(n);
      }},
     {Symbol::fromQualString("aten::mul"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {

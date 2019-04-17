@@ -37,6 +37,13 @@ tvm::relay::Expr TVMCompiler::convertToRelay(const IValue& val) {
     auto v = tvm::relay::ConstantNode::make(x);
     return v;
   }
+  if (val.isBool()) {
+    auto x = tvm::runtime::NDArray::Empty(
+        {}, tvm::runtime::String2TVMType("bool"), ctx_);
+    reinterpret_cast<int32_t*>(x->data)[0] = val.toBool();
+    auto v = tvm::relay::ConstantNode::make(x);
+    return v;
+  }
   // TODO Add None type to Relay
   if (val.isNone()) {
     auto x = tvm::runtime::NDArray::Empty(
