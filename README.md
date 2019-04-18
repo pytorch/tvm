@@ -19,7 +19,7 @@ python setup.py install
 ## Test
 
 ```
-python test/operators.py
+python setup.py test 
 ```
 
 ## Usage
