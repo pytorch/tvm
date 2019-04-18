@@ -160,6 +160,26 @@ RegisterTVMOperator reg({
        auto out = tvm::relay::CallNode::make(op, inputs, tvm::Attrs(), {});
        return out;
      }},
+    {Symbol::fromQualString("aten::avg_pool2d"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       auto op = tvm::relay::Op::Get("nn.avg_pool2d");
+       auto pool_attrs = tvm::make_node<tvm::relay::AvgPool2DAttrs>();
+       pool_attrs->pool_size = relayToIntList(inputs[1]);
+       auto strides = relayToIntList(inputs[2]);
+       if (strides.size() == 0) {
+         // pytorch avg_pool2d semantic: strides default to pool size
+         pool_attrs->strides = pool_attrs->pool_size;
+       } else {
+         pool_attrs->strides = strides;
+       }
+       pool_attrs->padding = relayToIntList(inputs[3]);
+       pool_attrs->layout = "NCHW";
+       pool_attrs->ceil_mode = relayToConstant<bool>(inputs[4]);
+       pool_attrs->count_include_pad = relayToConstant<bool>(inputs[5]);
+
+       auto out = tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(pool_attrs), {});
+       return out;
+     }},
 });
 
 RegisterTVMOperatorSchedule reg_sched(

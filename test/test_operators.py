@@ -59,6 +59,16 @@ class TestOperators(TestCase):
 
         self.checkTraceTVM(relu, input_shapes=[(100,)], verbose=True)
 
+    def test_avg_pool2d(self):
+        def avg_pool2d(a):
+            return F.avg_pool2d(a, 2)
+
+        def avg_pool2d_strides_ceil_mode_pad(a):
+            return F.avg_pool2d(a, 2, stride=[1, 1], ceil_mode=True, count_include_pad=True)
+
+        self.checkTraceTVM(avg_pool2d, input_shapes=[[20,16,10,10]], verbose=True)
+        self.checkTraceTVM(avg_pool2d_strides_ceil_mode_pad, input_shapes=[[20,16,10,10]], verbose=True)
+
 
 if __name__ == '__main__':
     unittest.main()
