@@ -1,5 +1,5 @@
 import unittest
-from util import TestCase
+from test.util import TestCase
 
 import torch
 import torch.nn.functional as F
