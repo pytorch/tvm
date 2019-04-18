@@ -22,6 +22,24 @@ python setup.py install
 python test/operators.py
 ```
 
+## Usage
+
+This package transparently hooks into PyTorch's JIT, so the same tooling is applicable (see `@torch.jit.script`, `torch.jit.trace` and `graph_for`).  See below for an example.
+
+```
+from tvm import relay # This imports all the topi operators
+import torch_tvm
+
+torch_tvm.enable()
+
+# The following function will be compiled with TVM
+@torch.jit.script
+def my_func(a, b, c):
+    return a * b + c
+```
+
+To disable the JIT hooks, use `torch_tvm.disable()`.
+
 ## Code Layout
 
 - `register.cpp`: Sets up pybind bindings and invokes the registration of a TVM backend.
