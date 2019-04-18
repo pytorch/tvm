@@ -53,6 +53,12 @@ class TestOperators(TestCase):
         self.checkTraceTVM(batch_norm_weighted,
           input_tensors=[a,b,c,d,c,b], verbose=True)
 
+    def test_relu(self):
+        def relu(a):
+            return F.relu(F.relu(a))
+
+        self.checkTraceTVM(relu, input_shapes=[(100,)], verbose=True)
+
 
 if __name__ == '__main__':
     unittest.main()
