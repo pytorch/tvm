@@ -51,9 +51,10 @@ To disable the JIT hooks, use `torch_tvm.disable()`.
 ## TODO
 
 - Add ability to register translations from opaque op names to TVM (as is done in `operator.cpp`) from Python.
-- Zero copy `set_input`.
-- Threadpool
-- Allocator
+- Zero copy `set_input`
+- Bail-out mechanism (invoke PyTorch JIT fallback)
+- Threadpool integration
+- Allocator integration
 - Operator translation
   - [x] Add
   - [x] Multiply
