@@ -6,7 +6,6 @@ import unittest
 import torch
 from torch.autograd.profiler import profile
 
-from tvm import relay # This registers all the schedules
 import torch_tvm
 
 # base TestCase class
