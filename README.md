@@ -40,7 +40,7 @@ python test/operators.py
   - [x] Add
   - [x] Multiply
   - [ ] Convolution
-  - [ ] BatchNorm
+  - [x] BatchNorm
   - [ ] Relu
   - [ ] AveragePool
   - [ ] MaxPool
