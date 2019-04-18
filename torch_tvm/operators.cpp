@@ -99,12 +99,12 @@ RegisterTVMOperator reg({
            inputs[0],
            inputs[1],
        };
-       // TODO: support passing bias to tvm
 
        auto conv_attrs = tvm::make_node<tvm::relay::Conv2DAttrs>();
        conv_attrs->groups = relayToConstant<int>(inputs[8]);
        conv_attrs->data_layout = "NCHW";
        conv_attrs->kernel_layout = "OIHW";
+       // kernel size information should already embed in the weight shape
        // TODO: figure out kernel size usage in tvm
        conv_attrs->kernel_size = tvm::NullValue<tvm::Array<tvm::relay::IndexExpr>>();
        conv_attrs->strides = relayToIntList(inputs[3]);
@@ -113,6 +113,18 @@ RegisterTVMOperator reg({
 
        auto out = tvm::relay::CallNode::make(
            op, new_inputs, tvm::Attrs(conv_attrs), {});
+
+       // Check if bias node is a var or constant (denoting a None currently),
+       // if bias is present, emit an additional bias_add node.
+       // TODO: better check when relay has None type
+       auto bias_is_none = inputs[2].as<tvm::relay::ConstantNode>();
+       if (!bias_is_none) {
+         auto bias_add_op = tvm::relay::Op::Get("nn.bias_add");
+         auto bias_add_attrs = tvm::make_node<tvm::relay::BiasAddAttrs>();
+         bias_add_attrs->axis = 1;
+         return tvm::relay::CallNode::make(
+             bias_add_op, {out, inputs[2]}, tvm::Attrs(bias_add_attrs), {});
+       }
        return out;
      }},
     {Symbol::fromQualString("aten::batch_norm"),
@@ -159,9 +171,6 @@ RegisterTVMOperatorSchedule reg_sched(
      {"multiply", []() {
         return tvm::runtime::Registry::Get("topi.generic.schedule_injective");
       }},
-     {"conv2d", []() {
-        return tvm::runtime::Registry::Get("topi.generic.nn.schedule_conv2d_nchw");
-      }}
     });
 
 
