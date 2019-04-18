@@ -43,6 +43,16 @@ T relayToConstant(tvm::relay::Expr e) {
   return static_cast<T*>(c->data->data)[0];
 }
 
+tvm::Array<tvm::relay::IndexExpr> relayToIntList(tvm::relay::Expr e) {
+  auto t = e.as<tvm::relay::TupleNode>();
+  tvm::Array<tvm::relay::IndexExpr> elems;
+  for (auto c: t->fields) {
+    int elem = relayToConstant<int>(c);
+    elems.push_back(elem);
+  }
+  return elems;
+}
+
 RegisterTVMOperatorSchedule::RegisterTVMOperatorSchedule(
     std::vector<std::pair<std::string, TVMScheduleFunctor>> scheds) {
   for (const auto& pair : scheds) {
@@ -67,24 +77,46 @@ RegisterTVMOperator reg({
        auto out = tvm::relay::CallNode::make(op, add_inputs, tvm::Attrs(), {});
        return out;
      }},
-    {Symbol::fromQualString("aten::conv2d"),
+    {Symbol::fromQualString("aten::_convolution"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
-       static const tvm::relay::Op& op = tvm::relay::Op::Get("nn.conv2d");
+       bool is_transpose = relayToConstant<bool>(inputs[6]);
+       // check the operator to emit base on is_transpose
+       auto op = tvm::relay::Op::Get("nn.conv2d");
+       if (is_transpose) {
+          op = tvm::relay::Op::Get("nn.conv2d_transpose");
+       }
+
+       // input and filter
        tvm::Array<tvm::relay::Expr> new_inputs = {
            inputs[0],
            inputs[1],
        };
+
        auto conv_attrs = tvm::make_node<tvm::relay::Conv2DAttrs>();
-       conv_attrs->groups = 1;
+       conv_attrs->groups = relayToConstant<int>(inputs[8]);
        conv_attrs->data_layout = "NCHW";
        conv_attrs->kernel_layout = "OIHW";
-       conv_attrs->kernel_size = {3, 3};
-       conv_attrs->padding = {0, 0};
-       conv_attrs->strides = {1, 1};
-       conv_attrs->dilation = {1, 1};
+       // kernel size information should already embed in the weight shape
+       // TODO: figure out kernel size usage in tvm
+       conv_attrs->kernel_size = tvm::NullValue<tvm::Array<tvm::relay::IndexExpr>>();
+       conv_attrs->strides = relayToIntList(inputs[3]);
+       conv_attrs->padding = relayToIntList(inputs[4]);
+       conv_attrs->dilation = relayToIntList(inputs[5]);
 
        auto out = tvm::relay::CallNode::make(
            op, new_inputs, tvm::Attrs(conv_attrs), {});
+
+       // Check if bias node is a var or constant (denoting a None currently),
+       // if bias is present, emit an additional bias_add node.
+       // TODO: better check when relay has None type
+       auto bias_is_none = inputs[2].as<tvm::relay::ConstantNode>();
+       if (!bias_is_none) {
+         auto bias_add_op = tvm::relay::Op::Get("nn.bias_add");
+         auto bias_add_attrs = tvm::make_node<tvm::relay::BiasAddAttrs>();
+         bias_add_attrs->axis = 1;
+         return tvm::relay::CallNode::make(
+             bias_add_op, {out, inputs[2]}, tvm::Attrs(bias_add_attrs), {});
+       }
        return out;
      }},
     {Symbol::fromQualString("aten::batch_norm"),
@@ -125,13 +157,13 @@ RegisterTVMOperator reg({
 });
 
 RegisterTVMOperatorSchedule reg_sched(
-    {{"add",
-      []() {
+    {{"add", []() {
         return tvm::runtime::Registry::Get("topi.generic.schedule_injective");
       }},
      {"multiply", []() {
         return tvm::runtime::Registry::Get("topi.generic.schedule_injective");
-      }}});
+      }},
+    });
 
 
 // flag to control whether to enable tvm fusion, default to false
