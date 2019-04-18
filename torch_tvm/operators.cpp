@@ -43,23 +43,6 @@ T relayToConstant(tvm::relay::Expr e) {
   return static_cast<T*>(c->data->data)[0];
 }
 
-RegisterTVMOperatorSchedule::RegisterTVMOperatorSchedule(
-    std::vector<std::pair<std::string, TVMScheduleFunctor>> scheds) {
-  for (const auto& pair : scheds) {
-    auto name = std::get<0>(pair);
-    auto sched_f = std::get<1>(pair);
-    getTVMScheduleMap()[name] = sched_f;
-  }
-}
-
-template <typename T>
-T relayToConstant(tvm::relay::Expr e) {
-  auto c = e.as<tvm::relay::ConstantNode>();
-  AT_ASSERT(c->is_scalar());
-  return static_cast<T*>(c->data->data)[0];
-}
-
-
 tvm::Array<tvm::relay::IndexExpr> relayToIntList(tvm::relay::Expr e) {
   auto t = e.as<tvm::relay::TupleNode>();
   tvm::Array<tvm::relay::IndexExpr> elems;
@@ -68,6 +51,15 @@ tvm::Array<tvm::relay::IndexExpr> relayToIntList(tvm::relay::Expr e) {
     elems.push_back(elem);
   }
   return elems;
+}
+
+RegisterTVMOperatorSchedule::RegisterTVMOperatorSchedule(
+    std::vector<std::pair<std::string, TVMScheduleFunctor>> scheds) {
+  for (const auto& pair : scheds) {
+    auto name = std::get<0>(pair);
+    auto sched_f = std::get<1>(pair);
+    getTVMScheduleMap()[name] = sched_f;
+  }
 }
 
 RegisterTVMOperator reg({
