@@ -115,6 +115,12 @@ RegisterTVMOperator reg({
        n->index = 0;
        return tvm::relay::TupleGetItem(n);
      }},
+    {Symbol::fromQualString("aten::relu"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       auto op = tvm::relay::Op::Get("nn.relu");
+       auto out = tvm::relay::CallNode::make(op, inputs, tvm::Attrs(), {});
+       return out;
+     }},
     {Symbol::fromQualString("aten::mul"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("multiply");
