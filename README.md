@@ -2,10 +2,10 @@
 
 ## Build
 
-You'll need to build PyTorch on top of this PR: https://github.com/pytorch/pytorch/pull/18846
+You'll need to build PyTorch on top of this PR: https://github.com/pytorch/pytorch/pull/18588
 ```
 cd pytorch
-git fetch origin pull/18846/head:tvm_dev
+git fetch origin pull/18588/head:tvm_dev
 git checkout tvm_dev
 python setup.py install
 ```
