@@ -162,16 +162,6 @@ RegisterTVMOperator reg({
      }},
 });
 
-RegisterTVMOperatorSchedule reg_sched(
-    {{"add", []() {
-        return tvm::runtime::Registry::Get("topi.generic.schedule_injective");
-      }},
-     {"multiply", []() {
-        return tvm::runtime::Registry::Get("topi.generic.schedule_injective");
-      }},
-    });
-
-
 // flag to control whether to enable tvm fusion, default to false
 static bool tvm_fusion_enabled = false;
 
