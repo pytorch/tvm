@@ -58,10 +58,10 @@ To disable the JIT hooks, use `torch_tvm.disable()`.
 - Operator translation
   - [x] Add
   - [x] Multiply
-  - [ ] Convolution
+  - [x] Convolution
   - [x] BatchNorm
-  - [ ] Relu
-  - [ ] AveragePool
+  - [x] Relu
+  - [x] AveragePool
   - [ ] MaxPool
   - [ ] Linear
 - Tensor manipulation
