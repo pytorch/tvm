@@ -134,7 +134,7 @@ tvm::relay::Function TVMCompiler::convertToRelay(
   AT_ASSERT(value_map.find(output) != value_map.end());
   tvm::Array<tvm::relay::Var> free_vars =
       tvm::relay::FreeVars(value_map[output]);
-  AT_ASSERT(free_vars.size() == input_vars.size());
+  AT_ASSERT(free_vars.size() <= input_vars.size());
 
   return tvm::relay::FunctionNode::make(
       input_vars, value_map[output], tvm::relay::Type(), {});
