@@ -108,10 +108,22 @@ tvm::relay::Function TVMCompiler::convertToRelay(
         if (use.user->outputs().size() < 1) {
           continue;
         }
-        // TODO handle multiple outputs
-        AT_ASSERT(use.user->outputs().size() == 1);
-        value_map[use.user->output()] = getOperator(use.user, relay_inputs);
-        new_frontier.emplace_back(use.user->output());
+        // if there are 2+ outputs, getOperator returns a tuple
+        if (use.user->outputs().size() == 1) {
+          value_map[use.user->output()] = getOperator(use.user, relay_inputs);
+          new_frontier.emplace_back(use.user->output());
+        } else {
+          auto tuple = getOperator(use.user, relay_inputs);
+          int index = 0;
+          for (const auto& output : use.user->outputs()) {
+            auto n = tvm::make_node<tvm::relay::TupleGetItemNode>();
+            n->tuple = tuple;
+            n->index = index;
+            value_map[output] = tvm::relay::TupleGetItem(n);
+            index++;
+            new_frontier.emplace_back(output);
+          }
+        }
       }
     }
     frontier = new_frontier;
