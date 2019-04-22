@@ -35,12 +35,33 @@ void registerSchedule(std::string name) {
     getTVMScheduleMap()[name] = []() { return nullptr; };
   }
 }
+bool isConstant(tvm::relay::Expr e) {
+  auto c = e.as<tvm::relay::ConstantNode>();
+  return !!c;
+}
 
 template <typename T>
 T relayToConstant(tvm::relay::Expr e) {
   auto c = e.as<tvm::relay::ConstantNode>();
+  AT_ASSERT(c);
   AT_ASSERT(c->is_scalar());
   return static_cast<T*>(c->data->data)[0];
+}
+
+bool relayIsNone(tvm::relay::Expr e) {
+  if (!isConstant(e)) {
+    return false;
+  }
+  auto c = e.as<tvm::relay::ConstantNode>();
+  if (!c->is_scalar()) {
+    return false;
+  }
+  auto val = static_cast<uint64_t*>(c->data->data)[0];
+  return val == getNoneSentinel();
+}
+
+uint64_t getNoneSentinel() {
+  return 0xe4fa3adecabcf036;
 }
 
 tvm::Array<tvm::relay::IndexExpr> relayToIntList(tvm::relay::Expr e) {
@@ -122,6 +143,21 @@ RegisterTVMOperator reg({
     {Symbol::fromQualString("aten::batch_norm"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) -> tvm::relay::Expr {
        auto op = tvm::relay::Op::Get("nn.batch_norm");
+       auto attrs = tvm::make_node<tvm::relay::BatchNormAttrs>();
+       auto eps = relayToConstant<double>(inputs[7]);
+       attrs->epsilon = eps;
+       attrs->axis = 1;
+
+       if (relayIsNone(inputs[1])) {
+         attrs->scale = false;
+       } else {
+         attrs->scale = true;
+       }
+       if (relayIsNone(inputs[2])) {
+         attrs->center = false;
+       } else {
+         attrs->center = true;
+       }
 
        auto& broadcast = tvm::relay::Op::Get("broadcast_to_like");
        tvm::Array<tvm::relay::Expr> bn_inputs = {
@@ -129,17 +165,11 @@ RegisterTVMOperator reg({
            tvm::relay::CallNode::make(
                broadcast, {inputs[1], inputs[3]}, tvm::Attrs(), {}),
            tvm::relay::CallNode::make(
-               broadcast, {inputs[1], inputs[3]}, tvm::Attrs(), {}),
+               broadcast, {inputs[2], inputs[3]}, tvm::Attrs(), {}),
            inputs[3],
            inputs[4],
        };
-       auto attrs = tvm::make_node<tvm::relay::BatchNormAttrs>();
-       auto eps = relayToConstant<double>(inputs[7]);
-       attrs->epsilon = eps;
-       attrs->axis = 1;
-       // TODO handle gamma and beta correctly
-       attrs->center = false;
-       attrs->scale = false;
+
        auto out =
            tvm::relay::CallNode::make(op, bn_inputs, tvm::Attrs(attrs), {});
        if (node->outputs().size() > 1) {
