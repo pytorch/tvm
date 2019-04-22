@@ -108,24 +108,42 @@ tvm::relay::Function TVMCompiler::convertToRelay(
         if (use.user->outputs().size() < 1) {
           continue;
         }
-        // TODO handle multiple outputs
-        AT_ASSERT(use.user->outputs().size() == 1);
-        value_map[use.user->output()] = getOperator(use.user, relay_inputs);
-        new_frontier.emplace_back(use.user->output());
+        // if there are 2+ outputs, getOperator returns a tuple
+        if (use.user->outputs().size() == 1) {
+          value_map[use.user->output()] = getOperator(use.user, relay_inputs);
+          new_frontier.emplace_back(use.user->output());
+        } else {
+          auto tuple = getOperator(use.user, relay_inputs);
+          int index = 0;
+          for (const auto& output : use.user->outputs()) {
+            auto n = tvm::make_node<tvm::relay::TupleGetItemNode>();
+            n->tuple = tuple;
+            n->index = index;
+            value_map[output] = tvm::relay::TupleGetItem(n);
+            index++;
+            new_frontier.emplace_back(output);
+          }
+        }
       }
     }
     frontier = new_frontier;
   }
 
-  AT_ASSERT(subgraph->outputs().size() == 1);
-  auto output = subgraph->outputs().at(0);
-  AT_ASSERT(value_map.find(output) != value_map.end());
-  tvm::Array<tvm::relay::Var> free_vars =
-      tvm::relay::FreeVars(value_map[output]);
-  AT_ASSERT(free_vars.size() == input_vars.size());
+  tvm::NodePtr<tvm::relay::TupleNode> n = tvm::make_node<tvm::relay::TupleNode>();
+  tvm::Array<tvm::relay::Expr> fields;
+  for (const auto& sg_output : subgraph->outputs()) {
+    AT_ASSERT(value_map.find(sg_output) != value_map.end());
+    fields.push_back(value_map[sg_output]);
+  }
+  n->fields = std::move(fields);
+  auto output = tvm::relay::Tuple(n);
+
+  tvm::Array<tvm::relay::Var> free_vars = tvm::relay::FreeVars(output);
+  AT_CHECK(free_vars.size() <= input_vars.size(), "Determined ", free_vars.size(),
+  " free vars but only ", input_vars.size(), " inputs");
 
   return tvm::relay::FunctionNode::make(
-      input_vars, value_map[output], tvm::relay::Type(), {});
+      input_vars, output, tvm::relay::Type(), {});
 }
 
 TVMCompiler::TVMCompiler(const Node* node) {

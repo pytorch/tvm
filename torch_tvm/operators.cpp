@@ -120,7 +120,7 @@ RegisterTVMOperator reg({
        return out;
      }},
     {Symbol::fromQualString("aten::batch_norm"),
-     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) -> tvm::relay::Expr {
        auto op = tvm::relay::Op::Get("nn.batch_norm");
 
        auto& broadcast = tvm::relay::Op::Get("broadcast_to_like");
@@ -142,6 +142,9 @@ RegisterTVMOperator reg({
        attrs->scale = false;
        auto out =
            tvm::relay::CallNode::make(op, bn_inputs, tvm::Attrs(attrs), {});
+       if (node->outputs().size() > 1) {
+         return out;
+       }
        auto n = tvm::make_node<tvm::relay::TupleGetItemNode>();
        n->tuple = std::move(out);
        n->index = 0;
