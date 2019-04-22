@@ -10,6 +10,9 @@ tvm::relay::Expr getOperator(
     torch::jit::Node* node,
     tvm::Array<tvm::relay::Expr> inputs);
 
+bool relayIsNone(tvm::relay::Expr e);
+uint64_t getNoneSentinel();
+
 using TVMOpFunctor = std::function<tvm::relay::Expr(
     torch::jit::Node* node,
     tvm::Array<tvm::relay::Expr> inputs)>;

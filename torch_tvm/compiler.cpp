@@ -45,10 +45,11 @@ tvm::relay::Expr TVMCompiler::convertToRelay(const IValue& val) {
     return v;
   }
   // TODO Add None type to Relay
+  // HACK sentinel value used for None type
   if (val.isNone()) {
     auto x = tvm::runtime::NDArray::Empty(
-        {}, tvm::runtime::String2TVMType("int32"), ctx_);
-    reinterpret_cast<int32_t*>(x->data)[0] = 0;
+        {}, tvm::runtime::String2TVMType("uint64"), ctx_);
+    reinterpret_cast<uint64_t*>(x->data)[0] = getNoneSentinel();
     auto v = tvm::relay::ConstantNode::make(x);
     return v;
   }
