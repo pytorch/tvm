@@ -333,7 +333,7 @@ import torch_tvm
 
 
 class TestModels(TVMTest):
-    @unittest.skip("Known broken")
+    #@unittest.skip("Known broken")
     def test_resnets(self):
         for f in [
             resnet18,
@@ -346,7 +346,7 @@ class TestModels(TVMTest):
         ]:
             model = f(True)
             input_image = torch.rand(1, 3, 224, 224)  # TODO real image
-            ref_out, tvm_out = self.runBoth(model, [input_image])
+            ref_out, tvm_out = self.runBoth(model, input_image)
             assert torch.allclose(ref_out, tvm_out)
 
 
