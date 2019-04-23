@@ -108,22 +108,10 @@ tvm::relay::Function TVMCompiler::convertToRelay(
         if (use.user->outputs().size() < 1) {
           continue;
         }
-        // if there are 2+ outputs, getOperator returns a tuple
-        if (use.user->outputs().size() == 1) {
-          value_map[use.user->output()] = getOperator(use.user, relay_inputs);
-          new_frontier.emplace_back(use.user->output());
-        } else {
-          auto tuple = getOperator(use.user, relay_inputs);
-          int index = 0;
-          for (const auto& output : use.user->outputs()) {
-            auto n = tvm::make_node<tvm::relay::TupleGetItemNode>();
-            n->tuple = tuple;
-            n->index = index;
-            value_map[output] = tvm::relay::TupleGetItem(n);
-            index++;
-            new_frontier.emplace_back(output);
-          }
-        }
+        // TODO handle multiple outputs
+        AT_ASSERT(use.user->outputs().size() == 1);
+        value_map[use.user->output()] = getOperator(use.user, relay_inputs);
+        new_frontier.emplace_back(use.user->output());
       }
     }
     frontier = new_frontier;
@@ -134,7 +122,7 @@ tvm::relay::Function TVMCompiler::convertToRelay(
   AT_ASSERT(value_map.find(output) != value_map.end());
   tvm::Array<tvm::relay::Var> free_vars =
       tvm::relay::FreeVars(value_map[output]);
-  AT_ASSERT(free_vars.size() <= input_vars.size());
+  AT_ASSERT(free_vars.size() == input_vars.size());
 
   return tvm::relay::FunctionNode::make(
       input_vars, value_map[output], tvm::relay::Type(), {});
