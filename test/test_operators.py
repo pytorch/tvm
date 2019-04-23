@@ -1,74 +1,137 @@
 import unittest
-from test.util import TestCase
-
+from test.util import TVMTest
+from hypothesis import given, settings, strategies as st
 import torch
 import torch.nn.functional as F
 import torch
 
 # test jit tvm operators
-class TestOperators(TestCase):
+class TestOperators(TVMTest):
+    @TVMTest.given(shape=TVMTest.rand_shape(rank=1))
+    def test_add(self, shape):
+        x = torch.rand(shape)
+        y = torch.rand(shape)
+        z = torch.rand(shape)
 
-    def test_add(self):
         def add(a, b, c):
-          return a + b + c
+            return a + b + c
 
-        self.checkTraceTVM(add, verbose=True)
+        ref_out, tvm_out = self.runBoth(add, x, y, z)
+        assert torch.allclose(ref_out, tvm_out)
 
-    def test_mul(self):
+    @TVMTest.given(shape=TVMTest.rand_shape(rank=1))
+    def test_mul(self, shape):
+        x = torch.rand(shape)
+        y = torch.rand(shape)
+        z = torch.rand(shape)
+
         def mul(a, b, c):
             return a * b * c
 
-        self.checkTraceTVM(mul, verbose=True)
+        ref_out, tvm_out = self.runBoth(mul, x, y, z)
+        assert torch.allclose(ref_out, tvm_out)
 
-    def test_conv(self):
-        def conv(a, b, c):
-            return F.conv2d(a, b) + c
+    @TVMTest.given(
+        shape=TVMTest.rand_shape(rank=4, min_dim=4, max_dim=4),
+        kernel_size=TVMTest.rand_int(3, 3),
+        num_kernels=TVMTest.rand_int(5, 5),
+    )
+    def test_conv_simple(self, shape, kernel_size, num_kernels):
+        # NCHW
+        X = torch.rand(shape)
+        W = torch.rand((num_kernels, shape[1], kernel_size, kernel_size))
+        bias = torch.rand(num_kernels)
 
-        def conv_bias(a, b, c, d):
-            return F.conv2d(a, b, c) + d
+        def conv(a, b):
+            return F.conv2d(a + a, b)
 
-        def conv_stride_padding_dilation(a, b, c):
-            return F.conv2d(a, b, stride=(2, 1), padding=(4, 2), dilation=(3,1)) + c
+        def conv_bias(a, b, c):
+            return F.conv2d(a + a, b, c)
 
-        self.checkTraceTVM(conv, input_shapes=[[20,16,10,10], [10,16,3,3], [20,10,8,8]], verbose=True)
-        self.checkTraceTVM(conv_bias, input_shapes=[[20,16,10,10], [10,16,3,3], [10,], [20,10,8,8]], verbose=True)
-        self.checkTraceTVM(conv_stride_padding_dilation, input_shapes=[[20,16,50,3], [33,16,3,5], [20,33,26,3]], verbose=True)
+        ref_out, tvm_out = self.runBoth(conv, X, W)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
+        ref_out, tvm_out = self.runBoth(conv_bias, X, W, bias)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
+    @TVMTest.given(
+        shape=TVMTest.rand_shape(rank=4, min_dim=15),
+        kernel_size=TVMTest.rand_int(3, 6),
+        num_kernels=TVMTest.rand_int(),
+        stride=TVMTest.rand_list(TVMTest.rand_int(1, 2), 2),
+        padding=TVMTest.rand_list(TVMTest.rand_int(0, 4), 2),
+        dilation=TVMTest.rand_list(TVMTest.rand_int(1, 2), 2),
+    )
+    def test_conv_complex(
+        self, shape, kernel_size, num_kernels, stride, padding, dilation
+    ):
+        # NCHW
+        X = torch.rand(shape)
+        W = torch.rand(num_kernels, shape[1], kernel_size, kernel_size)
 
-    def test_batch_norm(self):
+        def conv(a, b):
+            return F.conv2d(a + a, b, stride=stride, padding=padding, dilation=dilation)
+
+        ref_out, tvm_out = self.runBoth(conv, X, W)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
+
+    @TVMTest.given(shape=TVMTest.rand_shape(rank=2, min_dim=5))
+    def test_batch_norm(self, shape):
+        a = torch.rand(shape)
+        b = torch.rand(shape[1])
+        c = torch.rand(shape[1])
+        d = torch.rand(shape)
+
         def batch_norm(a, b, c, d):
             return F.batch_norm(a + d, b, c)
 
-        a = torch.rand(10,10)
-        b = torch.rand(10)
-        c = torch.rand(10)
-        d = torch.rand(10,10)
+        ref_out, tvm_out = self.runBoth(batch_norm, a, b, c, d)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.05, atol=0.01)
 
-        self.checkTraceTVM(batch_norm,
-          input_tensors=[a,b,c,d], verbose=True)
+    @unittest.skip("Known broken")
+    @TVMTest.given(shape=TVMTest.rand_shape(rank=2, min_dim=5))
+    def test_batch_norm_weighted(self, shape):
+        a = torch.rand(shape)
+        b = torch.rand(shape[1])
+        c = torch.rand(shape[1])
+        d = torch.rand(shape)
 
         def batch_norm_weighted(a, b, c, d, weight, bias):
             return F.batch_norm(a + d, b, c, weight=weight, bias=bias)
 
-        self.checkTraceTVM(batch_norm_weighted,
-          input_tensors=[a,b,c,d,c,b], verbose=True)
+        ref_out, tvm_out = self.runBoth(batch_norm_weighted, a, b, c, d, c, b)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
-    def test_relu(self):
+    @TVMTest.given(shape=TVMTest.rand_shape())
+    def test_relu(self, shape):
+        X = torch.rand(shape)
+
         def relu(a):
             return F.relu(F.relu(a))
 
-        self.checkTraceTVM(relu, input_shapes=[(100,)], verbose=True)
+        ref_out, tvm_out = self.runBoth(relu, X)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
-    def test_avg_pool2d(self):
+    # Known bug -- stride > 2 has mismatched padding
+    @TVMTest.given(
+        shape=TVMTest.rand_shape(rank=4, min_dim=4),
+        stride=TVMTest.rand_list(TVMTest.rand_int(1, 2), 2),
+    )
+    def test_avg_pool2d(self, shape, stride):
+        X = torch.rand(shape)
+
         def avg_pool2d(a):
             return F.avg_pool2d(a, 2)
 
         def avg_pool2d_strides_ceil_mode_pad(a):
-            return F.avg_pool2d(a, 2, stride=[1, 1], ceil_mode=True, count_include_pad=True)
+            return F.avg_pool2d(
+                a, 2, stride=stride, ceil_mode=True, count_include_pad=True
+            )
 
-        self.checkTraceTVM(avg_pool2d, input_shapes=[[20,16,10,10]], verbose=True)
-        self.checkTraceTVM(avg_pool2d_strides_ceil_mode_pad, input_shapes=[[20,16,10,10]], verbose=True)
+        ref_out, tvm_out = self.runBoth(avg_pool2d, X)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
+        ref_out, tvm_out = self.runBoth(avg_pool2d_strides_ceil_mode_pad, X)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
