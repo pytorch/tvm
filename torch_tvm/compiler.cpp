@@ -12,7 +12,7 @@ tvm::relay::Var TVMCompiler::convertToRelay(const Value* val) {
     auto pt_t = val->type()->cast<CompleteTensorType>();
     tvm::Array<HalideIR::Expr> sizes;
     for (const auto& size : pt_t->sizes()) {
-      sizes.push_back(HalideIR::Expr(size));
+      sizes.push_back(HalideIR::Expr(static_cast<int32_t>(size)));
     }
     // TODO: support non-float tensors
     auto t = tvm::relay::TensorTypeNode::make(sizes, ::tvm::Float(32));
@@ -190,7 +190,7 @@ void TVMCompiler::run(Stack& stack) {
 
   for (auto i = 0; i < subgraph_->inputs().size(); ++i) {
     auto* ivalue = value_to_ivalue[subgraph_->inputs()[i]];
-    auto tensor = ivalue->toTensor();
+    auto tensor = ivalue->toTensor().to(caffe2::TypeMeta::Make<float>());
     auto dl_tensor = at::toDLPack(tensor);
     cache_[spec].set_input(i, tvm::runtime::NDArray::FromDLPack(dl_tensor));
   }

@@ -32,6 +32,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
   // Register the pass that fuses parts of the graph into
   // a tvm::CompilationGroup
   RegisterPass pass([tvm_sym](std::shared_ptr<Graph>& g) {
+    std::cerr << "graph pre\n" << *g << "\n";
     CustomFuseGraph(g, isSupported, tvm_sym);
     std::cerr << "graph now\n" << *g << "\n";
   });

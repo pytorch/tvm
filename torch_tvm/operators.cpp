@@ -98,6 +98,20 @@ RegisterTVMOperator reg({
        auto out = tvm::relay::CallNode::make(op, add_inputs, tvm::Attrs(), {});
        return out;
      }},
+    {Symbol::fromQualString("aten::add_"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       auto op = tvm::relay::Op::Get("add");
+       // registerSchedule("add");
+       AT_ASSERT(inputs.size() == 3);
+       tvm::Array<tvm::relay::Expr> add_inputs = {inputs[0], inputs[1]};
+       // Handle pytorch's value argument in add
+       auto value = inputs[2].as<tvm::relay::ConstantNode>();
+       AT_ASSERT(
+           value->is_scalar() &&
+           reinterpret_cast<int*>(value->data->data)[0] == 1);
+       auto out = tvm::relay::CallNode::make(op, add_inputs, tvm::Attrs(), {});
+       return out;
+     }},
     {Symbol::fromQualString("aten::_convolution"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        bool is_transpose = relayToConstant<bool>(inputs[6]);
@@ -184,6 +198,16 @@ RegisterTVMOperator reg({
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("nn.relu");
        auto out = tvm::relay::CallNode::make(op, inputs, tvm::Attrs(), {});
+       return out;
+     }},
+    {Symbol::fromQualString("aten::threshold_"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       AT_ASSERT(relayToConstant<double>(inputs[1]) < 1e-7);
+       AT_ASSERT(relayToConstant<double>(inputs[1]) > -1e-7);
+       AT_ASSERT(relayToConstant<double>(inputs[2]) < 1e-7);
+       AT_ASSERT(relayToConstant<double>(inputs[2]) > -1e-7);
+       auto op = tvm::relay::Op::Get("nn.relu");
+       auto out = tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(), {});
        return out;
      }},
     {Symbol::fromQualString("aten::mul"),
