@@ -182,13 +182,11 @@ RegisterTVMOperator reg({
      }},
     {Symbol::fromQualString("aten::max_pool2d"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
-       std::cout<<"inputs size: " << inputs.size() << std::endl;
        auto pool_attrs = tvm::make_node<tvm::relay::MaxPool2DAttrs>();
        pool_attrs->pool_size = relayToIntList(inputs[1]);
        auto strides = relayToIntList(inputs[2]);
        if (strides.size() == 0) {
          // pytorch max_pool2d semantic: strides default to pool size
-         std::cout<<"size is 0" << std::endl;
          pool_attrs->strides = pool_attrs->pool_size;
        } else {
          pool_attrs->strides = strides;
@@ -199,7 +197,6 @@ RegisterTVMOperator reg({
        pool_attrs->ceil_mode = relayToConstant<bool>(inputs[5]);
 
        static const tvm::relay::Op& op = tvm::relay::Op::Get("nn.max_pool2d");
-       std::cout<<"ceil mode: " << pool_attrs->ceil_mode << std::endl;
        auto out = tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(pool_attrs), {});
        return out;
      }},
