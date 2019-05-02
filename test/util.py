@@ -9,6 +9,7 @@ from torch.autograd.profiler import profile
 import random
 
 import torch_tvm
+from tvm import autotvm
 
 # base TVMTest class
 class TVMTest(unittest.TestCase):
@@ -44,7 +45,7 @@ class TVMTest(unittest.TestCase):
         return get
 
     @classmethod
-    def given(*args_, examples=2, **kwargs_):
+    def given(*args_, examples=5, **kwargs_):
         def f(fn):
             def f_impl(*args, **kwargs):
                 for _ in range(examples):
@@ -60,26 +61,33 @@ class TVMTest(unittest.TestCase):
 
         return f
 
+
     def runBoth(self, func, *inputs, check_tvm=True):
-        # jit the function
-        trace_jit = torch.jit.trace(func, inputs)
-        ref_out = trace_jit(*inputs)
+        with torch.no_grad():
+          # jit the function
+          trace_jit = torch.jit.trace(func, inputs)
+          ref_out = trace_jit(*inputs)
 
-        # jit the function and lower to TVM
-        torch_tvm.enable()
-        trace_tvm = torch.jit.trace(func, inputs)
-        tvm_out = trace_tvm(*inputs)
+          # jit the function and lower to TVM
+          torch_tvm.enable()
+          with autotvm.apply_history_best("test/autotvm_tuning.log"):
+            trace_tvm = torch.jit.trace(func, inputs)
+            try:
+              tvm_out = trace_tvm(*inputs)
+            except Exception as e:
+              print("Error with graph\n{}".format(trace_tvm.graph))
+              raise e
 
-        if check_tvm == True:
-            tvm_unused = "TVM was not able to optimize this trace."
-            assert "tvm::CompilationGroup" in str(
-                trace_tvm.graph_for(*inputs)
-            ), tvm_unused
-            # tvm compile the graph and ensure TVM is used
-            with profile() as p:
-                _ = trace_tvm(*inputs)
-            assert "TVM" in [_.name for _ in p.function_events], tvm_unused
+          if check_tvm == True:
+              tvm_unused = "TVM was not able to optimize this trace."
+              assert "tvm::CompilationGroup" in str(
+                  trace_tvm.graph_for(*inputs)
+              ), tvm_unused + " Graph:\n" + str(trace_tvm.graph_for(*inputs))
+              # tvm compile the graph and ensure TVM is used
+              with profile() as p:
+                  _ = trace_tvm(*inputs)
+              assert "TVM" in [_.name for _ in p.function_events], tvm_unused
 
-        torch_tvm.disable()
+          torch_tvm.disable()
 
-        return ref_out, tvm_out
+          return ref_out, tvm_out

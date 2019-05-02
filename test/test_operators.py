@@ -88,7 +88,6 @@ class TestOperators(TVMTest):
         ref_out, tvm_out = self.runBoth(batch_norm, a, b, c, d)
         assert torch.allclose(ref_out, tvm_out, rtol=0.05, atol=0.01)
 
-    @unittest.skip("Known broken")
     @TVMTest.given(shape=TVMTest.rand_shape(rank=2, min_dim=5))
     def test_batch_norm_weighted(self, shape):
         a = torch.rand(shape)
@@ -115,7 +114,7 @@ class TestOperators(TVMTest):
     # Known bug -- stride > 2 has mismatched padding
     @TVMTest.given(
         shape=TVMTest.rand_shape(rank=4, min_dim=4),
-        stride=TVMTest.rand_list(TVMTest.rand_int(1, 2), 2),
+        stride=TVMTest.rand_list(TVMTest.rand_int(2, 2), 2),
     )
     def test_avg_pool2d(self, shape, stride):
         X = torch.rand(shape)
@@ -123,14 +122,14 @@ class TestOperators(TVMTest):
         def avg_pool2d(a):
             return F.avg_pool2d(a, 2)
 
-        def avg_pool2d_strides_ceil_mode_pad(a):
+        def avg_pool2d_strides(a):
             return F.avg_pool2d(
-                a, 2, stride=stride, ceil_mode=True, count_include_pad=True
+                a, 2, stride=stride
             )
 
         ref_out, tvm_out = self.runBoth(avg_pool2d, X)
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
-        ref_out, tvm_out = self.runBoth(avg_pool2d_strides_ceil_mode_pad, X)
+        ref_out, tvm_out = self.runBoth(avg_pool2d_strides, X)
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
 

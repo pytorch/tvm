@@ -225,6 +225,7 @@ packages = setuptools.find_packages()
 
 setup_requires.append('pytest-runner')
 tests_require.append('pytest')
+tests_require.append('scikit-image')
 
 ################################################################################
 # Final
