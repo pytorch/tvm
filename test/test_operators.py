@@ -1,6 +1,7 @@
 import unittest
 from test.util import TVMTest
 from hypothesis import given, settings, strategies as st
+
 import torch
 import torch.nn.functional as F
 import torch
@@ -130,6 +131,31 @@ class TestOperators(TVMTest):
         ref_out, tvm_out = self.runBoth(avg_pool2d, X)
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
         ref_out, tvm_out = self.runBoth(avg_pool2d_strides_ceil_mode_pad, X)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
+
+
+    # Known bug -- ceil_mode=True sometimes has mismatched shapes
+    @TVMTest.given(
+        shape=TVMTest.rand_shape(rank=4, min_dim=4),
+        stride=TVMTest.rand_list(TVMTest.rand_int(1, 2), 2),
+    )
+    def test_max_pool2d(self, shape, stride):
+        X = torch.rand(shape)
+        def max_pool2d(a):
+            return F.max_pool2d(a, 3) + 2.0
+
+        def max_pool2d_strides_padding_ceil_mode(a):
+            return F.max_pool2d(
+                a, 2, stride=stride, padding=1, ceil_mode=False
+            )
+
+        # TODO: fix the unstableness when ceil_mode=True case
+
+        ref_out, tvm_out = self.runBoth(max_pool2d, X)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
+        ref_out, tvm_out = self.runBoth(max_pool2d_strides_padding_ceil_mode, X)
+        print(ref_out.size())
+        print(tvm_out.size())
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
 
