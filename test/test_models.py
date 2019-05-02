@@ -329,25 +329,119 @@ import unittest
 from test.util import TVMTest
 
 import torch
+import torch.nn.functional as F
 import torch_tvm
+from skimage import io, transform
 
+
+class resnetish(nn.Module):
+    def __init__(self):
+        super(resnetish, self).__init__()
+        block = BasicBlock
+        layers = [2,2,2,2]
+        self.groups=1
+        width_per_group=64
+        self.base_width = width_per_group
+        self.inplanes = 64
+        self.conv1 = nn.Conv2d(
+            3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False
+        )
+        norm_layer = nn.BatchNorm2d
+        self.bn1 = norm_layer(self.inplanes)
+        self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.layer1 = self._make_layer(block, 64, layers[0], norm_layer=norm_layer)
+        self.layer2 = self._make_layer(
+            block, 128, layers[1], stride=2, norm_layer=norm_layer
+        )
+        self.layer3 = self._make_layer(
+            block, 256, layers[2], stride=2, norm_layer=norm_layer
+        )
+        self.layer4 = self._make_layer(
+            block, 512, layers[3], stride=2, norm_layer=norm_layer
+        )
+
+    def _make_layer(self, block, planes, blocks, stride=1, norm_layer=None):
+        if norm_layer is None:
+            norm_layer = nn.BatchNorm2d
+        downsample = None
+        if stride != 1 or self.inplanes != planes * block.expansion:
+            downsample = nn.Sequential(
+                conv1x1(self.inplanes, planes * block.expansion, stride),
+                norm_layer(planes * block.expansion),
+            )
+
+        layers = []
+        layers.append(
+            block(
+                self.inplanes,
+                planes,
+                stride,
+                downsample,
+                self.groups,
+                self.base_width,
+                norm_layer,
+            )
+        )
+        self.inplanes = planes * block.expansion
+        for _ in range(1, blocks):
+            layers.append(
+                block(
+                    self.inplanes,
+                    planes,
+                    groups=self.groups,
+                    base_width=self.base_width,
+                    norm_layer=norm_layer,
+                )
+            )
+
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+
+        return x
 
 class TestModels(TVMTest):
-    @unittest.skip("Known broken")
-    def test_resnets(self):
-        for f in [
-            resnet18,
-            resnet34,
-            resnet50,
-            resnet101,
-            resnet152,
-            resnext50_32x4d,
-            resnext101_32x8d,
-        ]:
-            model = f(True)
-            input_image = torch.rand(1, 3, 224, 224)  # TODO real image
-            ref_out, tvm_out = self.runBoth(model, [input_image])
-            assert torch.allclose(ref_out, tvm_out)
+    def model_test(self, constructor):
+        model = constructor(True)
+        model.eval()
+        image = io.imread('test/cat.png')[:,:,:3].transpose(2,0,1)
+        input_image = torch.unsqueeze(torch.Tensor(image), 0)
+        ref_out, tvm_out = self.runBoth(model, input_image)
+        # With CNN model tests we look for top-k similarity rather than
+        # exact numerical matches post-softmax.
+        k = 10
+        torch.testing.assert_allclose(ref_out.topk(k).indices, tvm_out.topk(k).indices)
+
+    def test_resnet18(self):
+        self.model_test(resnet18)
+    def test_resnet34(self):
+        self.model_test(resnet34)
+    def test_resnet50(self):
+        self.model_test(resnet50)
+    def test_resnet101(self):
+        self.model_test(resnet101)
+    def test_resnet152(self):
+        self.model_test(resnet152)
+    def test_resnext50_32x4d(self):
+        self.model_test(resnext50_32x4d)
+    def test_resnext101_32x8d(self):
+        self.model_test(resnext101_32x8d)
+
+    def test_resnetish(self):
+        model = resnetish()
+        model.eval()
+        image = io.imread('test/cat.png')[:,:,:3].transpose(2,0,1)
+        input_image = torch.unsqueeze(torch.Tensor(image), 0)
+        ref_out, tvm_out = self.runBoth(model, input_image)
+        torch.testing.assert_allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
 
 if __name__ == "__main__":
