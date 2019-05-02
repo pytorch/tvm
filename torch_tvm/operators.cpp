@@ -35,6 +35,7 @@ void registerSchedule(std::string name) {
     getTVMScheduleMap()[name] = []() { return nullptr; };
   }
 }
+
 bool isConstant(tvm::relay::Expr e) {
   auto c = e.as<tvm::relay::ConstantNode>();
   return !!c;
@@ -98,6 +99,20 @@ RegisterTVMOperator reg({
        auto out = tvm::relay::CallNode::make(op, add_inputs, tvm::Attrs(), {});
        return out;
      }},
+    {Symbol::fromQualString("aten::add_"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       auto op = tvm::relay::Op::Get("add");
+       // registerSchedule("add");
+       AT_ASSERT(inputs.size() == 3);
+       tvm::Array<tvm::relay::Expr> add_inputs = {inputs[0], inputs[1]};
+       // Handle pytorch's value argument in add
+       auto value = inputs[2].as<tvm::relay::ConstantNode>();
+       AT_ASSERT(
+           value->is_scalar() &&
+           reinterpret_cast<int*>(value->data->data)[0] == 1);
+       auto out = tvm::relay::CallNode::make(op, add_inputs, tvm::Attrs(), {});
+       return out;
+     }},
     {Symbol::fromQualString("aten::_convolution"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        bool is_transpose = relayToConstant<bool>(inputs[6]);
@@ -143,36 +158,52 @@ RegisterTVMOperator reg({
     {Symbol::fromQualString("aten::batch_norm"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) -> tvm::relay::Expr {
        auto op = tvm::relay::Op::Get("nn.batch_norm");
+       AT_CHECK(inputs.size() == 9, "batch_norm received ", inputs.size(), " inputs");
+       AT_CHECK(relayToConstant<bool>(inputs[5]) == false, "batch_norm is in training mode");
        auto attrs = tvm::make_node<tvm::relay::BatchNormAttrs>();
-       auto eps = relayToConstant<double>(inputs[7]);
+       auto eps = relayToConstant<float>(inputs[7]);
        attrs->epsilon = eps;
        attrs->axis = 1;
+       attrs->scale = false;
+       attrs->center = false;
 
-       if (relayIsNone(inputs[1])) {
-         attrs->scale = false;
-       } else {
-         attrs->scale = true;
-       }
-       if (relayIsNone(inputs[2])) {
-         attrs->center = false;
-       } else {
-         attrs->center = true;
-       }
+       TVMContext ctx_;
+       ctx_.device_type = kDLCPU;
+       ctx_.device_id = 0;
+       auto x = tvm::runtime::NDArray::Empty(
+           {}, tvm::runtime::String2TVMType("float32"), ctx_);
+       // Make this large to induce noticeable errors
+       reinterpret_cast<float*>(x->data)[0] = 1337e10;
+       tvm::relay::Expr v = tvm::relay::ConstantNode::make(x);
 
        auto& broadcast = tvm::relay::Op::Get("broadcast_to_like");
+       tvm::relay::Expr weight = tvm::relay::CallNode::make(
+           broadcast, {v, inputs[3]}, tvm::Attrs(), {});
+       tvm::relay::Expr bias = tvm::relay::CallNode::make(
+           broadcast, {v, inputs[3]}, tvm::Attrs(), {});
+
+       // TODO check if pytorch semantics allow these to be broadcast
+       if (!relayIsNone(inputs[1])) {
+         attrs->scale = true;
+         weight = inputs[1];
+       }
+       if (!relayIsNone(inputs[2])) {
+         attrs->center = true;
+         bias = inputs[2];
+       }
+
        tvm::Array<tvm::relay::Expr> bn_inputs = {
            inputs[0],
-           tvm::relay::CallNode::make(
-               broadcast, {inputs[1], inputs[3]}, tvm::Attrs(), {}),
-           tvm::relay::CallNode::make(
-               broadcast, {inputs[2], inputs[3]}, tvm::Attrs(), {}),
+           weight,
+           bias,
            inputs[3],
            inputs[4],
        };
 
        auto out =
            tvm::relay::CallNode::make(op, bn_inputs, tvm::Attrs(attrs), {});
-       if (node->outputs().size() > 1) {
+       AT_ASSERT(node->outputs().size() == 1);
+       if (node->outputs().size() == 2) {
          return out;
        }
        auto n = tvm::make_node<tvm::relay::TupleGetItemNode>();
@@ -184,6 +215,21 @@ RegisterTVMOperator reg({
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("nn.relu");
        auto out = tvm::relay::CallNode::make(op, inputs, tvm::Attrs(), {});
+       return out;
+     }},
+    {Symbol::fromQualString("aten::threshold_"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       AT_CHECK(!relayIsNone(inputs[0]));
+       AT_CHECK(!relayIsNone(inputs[1]));
+       AT_CHECK(!relayIsNone(inputs[2]));
+       auto d = relayToConstant<float>(inputs[1]);
+       AT_CHECK(d <  1e-7, "aten::threshold_ only supported for threshold 0, got", d);
+       AT_CHECK(d > -1e-7, "aten::threshold_ only supported for threshold 0, got", d);
+       d = relayToConstant<float>(inputs[2]);
+       AT_CHECK(d <  1e-7, "aten::threshold_ only supported for value 0, got", d);
+       AT_CHECK(d > -1e-7, "aten::threshold_ only supported for value 0, got", d);
+       auto op = tvm::relay::Op::Get("nn.relu");
+       auto out = tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(), {});
        return out;
      }},
     {Symbol::fromQualString("aten::mul"),
@@ -240,6 +286,10 @@ static bool tvm_fusion_enabled = false;
 
 void setEnabled(bool flag) {
   tvm_fusion_enabled = flag;
+}
+
+bool isEnabled() {
+  return tvm_fusion_enabled;
 }
 
 bool isSupported(Node* node) {

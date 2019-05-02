@@ -32,7 +32,9 @@ PYBIND11_MODULE(_torch_tvm, m) {
   // Register the pass that fuses parts of the graph into
   // a tvm::CompilationGroup
   RegisterPass pass([tvm_sym](std::shared_ptr<Graph>& g) {
-    CustomFuseGraph(g, isSupported, tvm_sym);
+    if (isEnabled()) {
+      CustomFuseGraph(g, isSupported, tvm_sym);
+    }
   });
 
   // python API to enable and disable tvm fusion

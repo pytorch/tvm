@@ -5,6 +5,8 @@
 #include <tvm/tvm.h>
 
 void setEnabled(bool flag);
+bool isEnabled();
+
 bool isSupported(torch::jit::Node* node);
 tvm::relay::Expr getOperator(
     torch::jit::Node* node,

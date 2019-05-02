@@ -4,15 +4,20 @@
 #include <ATen/DLConvertor.h>
 #include <torch/csrc/jit/constants.h>
 #include <torch/csrc/jit/fuser/kernel_cache.h>
+#include <limits>
 
 using namespace torch::jit;
 
-tvm::relay::Var TVMCompiler::convertToRelay(const Value* val) {
+tvm::relay::Var TVMCompiler::convertToRelay(Value* val) {
+  auto optional_ivalue = toIValue(val);
+  if (optional_ivalue.has_value()) {
+    val->inferTypeFrom(optional_ivalue.value().toTensor());
+  }
   if (val->isCompleteTensor()) {
     auto pt_t = val->type()->cast<CompleteTensorType>();
     tvm::Array<HalideIR::Expr> sizes;
     for (const auto& size : pt_t->sizes()) {
-      sizes.push_back(HalideIR::Expr(size));
+      sizes.push_back(HalideIR::Expr(static_cast<int32_t>(size)));
     }
     // TODO: support non-float tensors
     auto t = tvm::relay::TensorTypeNode::make(sizes, ::tvm::Float(32));
@@ -23,24 +28,33 @@ tvm::relay::Var TVMCompiler::convertToRelay(const Value* val) {
 }
 
 tvm::relay::Expr TVMCompiler::convertToRelay(const IValue& val) {
+  // All doubles are converted to floats
   if (val.isDouble()) {
     auto x = tvm::runtime::NDArray::Empty(
         {}, tvm::runtime::String2TVMType("float32"), ctx_);
-    reinterpret_cast<float*>(x->data)[0] = val.toDouble();
+    auto d = val.toDouble();
+    AT_CHECK(d <= std::numeric_limits<float>::max());
+    AT_CHECK(d >= std::numeric_limits<float>::lowest());
+    auto f = static_cast<float>(d);
+    reinterpret_cast<float*>(x->data)[0] = f;
     auto v = tvm::relay::ConstantNode::make(x);
     return v;
   }
+  // All Ints are converted to int32, which may overflow
   if (val.isInt()) {
     auto x = tvm::runtime::NDArray::Empty(
         {}, tvm::runtime::String2TVMType("int32"), ctx_);
-    reinterpret_cast<int32_t*>(x->data)[0] = val.toInt();
+    auto l = val.toInt();
+    AT_CHECK(l <= std::numeric_limits<int32_t>::max());
+    AT_CHECK(l >= std::numeric_limits<int32_t>::lowest());
+    reinterpret_cast<int32_t*>(x->data)[0] = l;
     auto v = tvm::relay::ConstantNode::make(x);
     return v;
   }
   if (val.isBool()) {
     auto x = tvm::runtime::NDArray::Empty(
         {}, tvm::runtime::String2TVMType("bool"), ctx_);
-    reinterpret_cast<int32_t*>(x->data)[0] = val.toBool();
+    reinterpret_cast<bool*>(x->data)[0] = val.toBool();
     auto v = tvm::relay::ConstantNode::make(x);
     return v;
   }
@@ -58,6 +72,8 @@ tvm::relay::Expr TVMCompiler::convertToRelay(const IValue& val) {
     for (const auto& elem : val.toIntList()->elements()) {
       auto x = tvm::runtime::NDArray::Empty(
           {}, tvm::runtime::String2TVMType("int32"), ctx_);
+      AT_CHECK(elem <= std::numeric_limits<int32_t>::max());
+      AT_CHECK(elem >= std::numeric_limits<int32_t>::lowest());
       reinterpret_cast<int32_t*>(x->data)[0] = elem;
       auto v = tvm::relay::ConstantNode::make(x);
       tuple_elems.push_back(v);
@@ -69,7 +85,7 @@ tvm::relay::Expr TVMCompiler::convertToRelay(const IValue& val) {
 }
 
 tvm::relay::Function TVMCompiler::convertToRelay(
-    std::shared_ptr<Graph> subgraph) {
+    std::shared_ptr<Graph> subgraph, std::vector<Value*>* input_values) {
   std::unordered_map<Value*, tvm::relay::Expr> value_map;
   tvm::Array<tvm::relay::Var> input_vars;
 
@@ -77,6 +93,7 @@ tvm::relay::Function TVMCompiler::convertToRelay(
     AT_ASSERT(input->isCompleteTensor());
     auto v = convertToRelay(input);
     input_vars.push_back(v);
+    input_values->emplace_back(input);
     value_map[input] = v;
   }
 
@@ -97,7 +114,14 @@ tvm::relay::Function TVMCompiler::convertToRelay(
               skip_user = true;
               break;
             } else {
-              value_map[input] = convertToRelay(optional_ivalue.value());
+              if (optional_ivalue.value().isTensor()) {
+                input_values->emplace_back(input);
+                auto input_var = convertToRelay(input);
+                input_vars.push_back(input_var);
+                value_map[input] = input_var;
+              } else {
+                value_map[input] = convertToRelay(optional_ivalue.value());
+              }
             }
           }
           relay_inputs.push_back(value_map[input]);
@@ -155,7 +179,7 @@ TVMCompiler::TVMCompiler(const Node* node) {
 }
 
 void TVMCompiler::run(Stack& stack) {
-  std::unordered_map<Value*, IValue*> value_to_ivalue;
+  std::unordered_map<Value*, IValue> value_to_ivalue;
   std::vector<IValue> inputs;
 
   // Reverse the stack
@@ -166,16 +190,17 @@ void TVMCompiler::run(Stack& stack) {
 
   for (auto i = 0; i < inputs.size(); ++i) {
     auto value_input = subgraph_->inputs()[i];
-    value_to_ivalue[value_input] = &inputs[i];
+    value_to_ivalue[value_input] = inputs[i];
   }
 
   CompleteArgumentSpec spec{false, ArrayRef<IValue>(inputs)};
 
+  std::vector<Value*> input_values_;
   if (cache_.find(spec) == cache_.end()) {
     for (auto& kv : value_to_ivalue) {
-      kv.first->inferTypeFrom(kv.second->toTensor());
+      kv.first->inferTypeFrom(kv.second.toTensor());
     }
-    auto func = convertToRelay(subgraph_);
+    auto func = convertToRelay(subgraph_, &input_values_);
     auto pfb = tvm::runtime::Registry::Get("relay.build_module._BuildModule");
     AT_ASSERT(pfb);
     tvm::runtime::Module build_mod = (*pfb)();
@@ -192,11 +217,20 @@ void TVMCompiler::run(Stack& stack) {
     cache_[spec].set_input = run_mod.GetFunction("set_input", false);
     cache_[spec].kernel = run_mod.GetFunction("run", false);
     cache_[spec].get_output = run_mod.GetFunction("get_output", false);
+    auto get_num_outputs = run_mod.GetFunction("get_num_outputs", false);
+    int n = get_num_outputs();
+    AT_CHECK(subgraph_->outputs().size() == n, "Compiled subgraph with mismatching num outputs");
   }
 
-  for (auto i = 0; i < subgraph_->inputs().size(); ++i) {
-    auto* ivalue = value_to_ivalue[subgraph_->inputs()[i]];
-    auto tensor = ivalue->toTensor();
+  for (auto i = 0; i < input_values_.size(); ++i) {
+    auto* value = input_values_[i];
+    if (!value_to_ivalue.count(value)) {
+      auto optional_ivalue = toIValue(value);
+      AT_ASSERT(optional_ivalue.has_value());
+      value_to_ivalue[value] = optional_ivalue.value();
+    }
+    auto ivalue = value_to_ivalue.at(input_values_[i]);
+    auto tensor = ivalue.toTensor().to(at::kFloat);
     auto dl_tensor = at::toDLPack(tensor);
     cache_[spec].set_input(i, tvm::runtime::NDArray::FromDLPack(dl_tensor));
   }
