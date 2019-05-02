@@ -6,6 +6,7 @@
 #include <tvm/relay/op.h>
 #include <tvm/relay/pass.h>
 #include <tvm/tvm.h>
+#include <vector>
 
 struct TVMObject {
   tvm::PackedFunc kernel;
@@ -22,8 +23,8 @@ struct TVMCompiler {
   std::unordered_map<torch::jit::CompleteArgumentSpec, TVMObject> cache_;
   TVMContext ctx_;
 
-  tvm::relay::Var convertToRelay(const torch::jit::Value* val);
+  tvm::relay::Var convertToRelay(torch::jit::Value* val);
   tvm::relay::Expr convertToRelay(const torch::jit::IValue& val);
   tvm::relay::Function convertToRelay(
-      std::shared_ptr<torch::jit::Graph> subgraph);
+      std::shared_ptr<torch::jit::Graph> subgraph, std::vector<torch::jit::Value*>* input_values);
 };
