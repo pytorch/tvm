@@ -6,6 +6,9 @@
 #include <torch/csrc/jit/pass_manager.h>
 #include <torch/csrc/jit/passes/graph_fuser.h>
 
+#include <tvm/runtime/packed_func.h>
+#include <tvm/runtime/registry.h>
+
 #include "compiler.h"
 #include "operators.h"
 
@@ -45,5 +48,11 @@ PYBIND11_MODULE(_torch_tvm, m) {
       setEnabled(false);
   });
 
+
   m.doc() = "This module does nothing but register a TVM backend.";
 }
+
+TVM_REGISTER_GLOBAL("torch_tvm.test")
+.set_body([](tvm::runtime::TVMArgs args, tvm::runtime::TVMRetValue* rv) {
+    *rv = 1337;
+    });
