@@ -130,21 +130,14 @@ tvm::relay::Function TVMCompiler::convertToRelay(
     frontier = new_frontier;
   }
 
-  auto output = ([&]() -> tvm::relay::Expr {
-    if (subgraph->outputs().size() == 1) {
-      auto sg_output = subgraph->outputs().at(0);
-      AT_ASSERT(value_map.find(sg_output) != value_map.end());
-      return value_map[sg_output];
-    }
-    tvm::NodePtr<tvm::relay::TupleNode> n = tvm::make_node<tvm::relay::TupleNode>();
-    tvm::Array<tvm::relay::Expr> fields;
-    for (const auto& sg_output : subgraph->outputs()) {
-      AT_ASSERT(value_map.find(sg_output) != value_map.end());
-      fields.push_back(value_map[sg_output]);
-    }
-    n->fields = std::move(fields);
-    return tvm::relay::Tuple(n);
-  })();
+  tvm::NodePtr<tvm::relay::TupleNode> n = tvm::make_node<tvm::relay::TupleNode>();
+  tvm::Array<tvm::relay::Expr> fields;
+  for (const auto& sg_output : subgraph->outputs()) {
+    AT_ASSERT(value_map.find(sg_output) != value_map.end());
+    fields.push_back(value_map[sg_output]);
+  }
+  n->fields = std::move(fields);
+  auto output = tvm::relay::Tuple(n);
 
   tvm::Array<tvm::relay::Var> free_vars = tvm::relay::FreeVars(output);
   AT_CHECK(free_vars.size() <= input_vars.size(), "Determined ", free_vars.size(),
