@@ -222,8 +222,7 @@ void TVMCompiler::run(Stack& stack) {
     AT_CHECK(subgraph_->outputs().size() == n, "Compiled subgraph with mismatching num outputs");
   }
 
-  for (auto i = 0; i < input_values_.size(); ++i) {//subgraph_->inputs().size(); ++i) {
-    //auto* ivalue = value_to_ivalue[subgraph_->inputs()[i]];
+  for (auto i = 0; i < input_values_.size(); ++i) {
     auto* value = input_values_[i];
     if (!value_to_ivalue.count(value)) {
       auto optional_ivalue = toIValue(value);
