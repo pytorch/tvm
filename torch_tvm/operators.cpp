@@ -225,11 +225,7 @@ RegisterTVMOperator reg({
        auto d = relayToConstant<float>(inputs[1]);
        AT_CHECK(d <  1e-7, "aten::threshold_ only supported for threshold 0, got", d);
        AT_CHECK(d > -1e-7, "aten::threshold_ only supported for threshold 0, got", d);
-       AT_CHECK(d <  1e-7, "aten::threshold_ only supported for threshold 0, got", d);
-       AT_CHECK(d > -1e-7, "aten::threshold_ only supported for threshold 0, got", d);
        d = relayToConstant<float>(inputs[2]);
-       AT_CHECK(d <  1e-7, "aten::threshold_ only supported for value 0, got", d);
-       AT_CHECK(d > -1e-7, "aten::threshold_ only supported for value 0, got", d);
        AT_CHECK(d <  1e-7, "aten::threshold_ only supported for value 0, got", d);
        AT_CHECK(d > -1e-7, "aten::threshold_ only supported for value 0, got", d);
        auto op = tvm::relay::Op::Get("nn.relu");

@@ -238,7 +238,7 @@ void TVMCompiler::run(Stack& stack) {
       value_to_ivalue[value] = optional_ivalue.value();
     }
     auto ivalue = value_to_ivalue.at(input_values_[i]);
-    auto tensor = ivalue.toTensor().to(caffe2::TypeMeta::Make<float>());
+    auto tensor = ivalue.toTensor().to(at::kFloat);
     auto dl_tensor = at::toDLPack(tensor);
     cache_[spec].set_input(i, tvm::runtime::NDArray::FromDLPack(dl_tensor));
   }
