@@ -201,6 +201,9 @@ void TVMCompiler::run(Stack& stack) {
       kv.first->inferTypeFrom(kv.second.toTensor());
     }
     auto func = convertToRelay(subgraph_, &input_values_);
+    auto pf = tvm::runtime::Registry::Get("relay._expr.AsText");
+    std::string func_debug_str = (*pf)(func, false, nullptr);
+    std::cerr << "Relay IR: \n" << func_debug_str;
     auto pfb = tvm::runtime::Registry::Get("relay.build_module._BuildModule");
     AT_ASSERT(pfb);
     tvm::runtime::Module build_mod = (*pfb)();
