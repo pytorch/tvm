@@ -62,7 +62,7 @@ To disable the JIT hooks, use `torch_tvm.disable()`.
   - [x] BatchNorm
   - [x] Relu
   - [x] AveragePool
-  - [ ] MaxPool
+  - [x] MaxPool
   - [ ] Linear
 - Tensor manipulation
   - [ ] Reshape
