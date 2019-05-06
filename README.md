@@ -27,7 +27,6 @@ python setup.py test
 This package transparently hooks into PyTorch's JIT, so the same tooling is applicable (see `@torch.jit.script`, `torch.jit.trace` and `graph_for`).  See below for an example.
 
 ```
-from tvm import relay # This imports all the topi operators
 import torch_tvm
 
 torch_tvm.enable()
