@@ -1,7 +1,6 @@
 #include <pybind11/pybind11.h>
 #include <torch/csrc/autograd/record_function.h>
 #include <torch/csrc/jit/custom_operator.h>
-#include <torch/csrc/jit/fuser/interface.h>
 #include <torch/csrc/jit/operator_options.h>
 #include <torch/csrc/jit/pass_manager.h>
 #include <torch/csrc/jit/passes/graph_fuser.h>
