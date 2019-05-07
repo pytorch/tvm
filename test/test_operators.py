@@ -1,6 +1,5 @@
 import unittest
 from test.util import TVMTest
-from hypothesis import given, settings, strategies as st
 
 import torch
 import torch.nn.functional as F
