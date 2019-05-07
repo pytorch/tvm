@@ -6,8 +6,6 @@ jobs:
     resource_class: 2xlarge+
     steps:
       - checkout
-    working_directory: ~/
-    steps:
       - run:
           name: Install dependencies
           command: |
@@ -17,19 +15,20 @@ jobs:
       - run:
           name: Checkout PyTorch
           command: |
+            cd ..
             git clone https://github.com/pytorch/pytorch.git --recursive
       - run:
           name: Build PyTorch 
           command: |
             source env/bin/activate
-            cd pytorch
+            cd ../pytorch
             pip install -r requirements.txt
             python setup.py install
-            cd ..
       - run:
           name: Build and test pytorch/tvm
           command: |
             source env/bin/activate
+            cd ..
             mv tvm pytorch_tvm
             cd pytorch_tvm
 
