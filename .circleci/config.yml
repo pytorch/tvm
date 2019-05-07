@@ -4,9 +4,10 @@ jobs:
     docker:
       - image: ubuntu:latest
     resource_class: 2xlarge+
-    working_directory: ~/
     steps:
       - checkout
+    working_directory: ~/
+    steps:
       - run:
           name: Install dependencies
           command: |
