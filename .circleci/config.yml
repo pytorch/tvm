@@ -3,6 +3,7 @@ jobs:
   build:
     docker:
       - image: ubuntu:latest
+    resource_class: large
     steps:
       - checkout
       - run:
