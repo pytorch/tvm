@@ -29,8 +29,6 @@ jobs:
           command: |
             source env/bin/activate
             cd tvm
-            git fetch origin master:diff
-            git checkout diff
 
             python setup.py install --cmake
             mkdir -p tvm/build/
