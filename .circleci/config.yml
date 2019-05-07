@@ -28,11 +28,9 @@ jobs:
           name: Build and test pytorch/tvm
           command: |
             source env/bin/activate
-            pwd
-            ls
 
-            git submodule init
-            git submodule update --recursive
+            git submodule sync --recursive
+            git submodule update --init --recursive
 
             python setup.py install --cmake
             mkdir -p tvm/build/
