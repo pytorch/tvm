@@ -1,5 +1,6 @@
 # Pytorch TVM Extension
 
+
 ## Build
 
 You'll need to build PyTorch on top of this PR: https://github.com/pytorch/pytorch/pull/18588
@@ -17,6 +18,8 @@ python setup.py install
 ```
 
 ## Test
+
+[![CircleCI](https://circleci.com/gh/pytorch/tvm.svg?style=svg)](https://circleci.com/gh/pytorch/tvm)
 
 ```
 python setup.py test 
