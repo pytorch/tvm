@@ -1,7 +1,6 @@
 #include <pybind11/pybind11.h>
 #include <torch/csrc/autograd/record_function.h>
 #include <torch/csrc/jit/custom_operator.h>
-#include <torch/csrc/jit/fuser/interface.h>
 #include <torch/csrc/jit/operator_options.h>
 #include <torch/csrc/jit/pass_manager.h>
 #include <torch/csrc/jit/passes/graph_fuser.h>
@@ -38,12 +37,8 @@ PYBIND11_MODULE(_torch_tvm, m) {
   });
 
   // python API to enable and disable tvm fusion
-  m.def("enable", [](){
-      setEnabled(true);
-  });
-  m.def("disable", [](){
-      setEnabled(false);
-  });
+  m.def("enable", []() { setEnabled(true); });
+  m.def("disable", []() { setEnabled(false); });
 
   m.doc() = "This module does nothing but register a TVM backend.";
 }

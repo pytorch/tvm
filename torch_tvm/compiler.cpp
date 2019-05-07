@@ -3,7 +3,6 @@
 
 #include <ATen/DLConvertor.h>
 #include <torch/csrc/jit/constants.h>
-#include <torch/csrc/jit/fuser/kernel_cache.h>
 #include <limits>
 
 using namespace torch::jit;
