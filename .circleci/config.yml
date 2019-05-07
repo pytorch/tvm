@@ -3,21 +3,21 @@ jobs:
   build:
     docker:
       - image: ubuntu:latest
-    resource_class: large
+    resource_class: 2xlarge+
     steps:
       - checkout
       - run:
-          name: InstallDeps
+          name: Install dependencies
           command: |
             apt update
             apt-get install -y python3 python3-venv git cmake ninja-build g++ python3-dev llvm
             python3 -m venv env
       - run:
-          name: DownloadPyTorch
+          name: Checkout PyTorch
           command: |
             git clone https://github.com/pytorch/pytorch.git --recursive
       - run:
-          name: BuildPyTorch 
+          name: Build PyTorch 
           command: |
             source env/bin/activate
             cd pytorch
@@ -25,7 +25,7 @@ jobs:
             python setup.py install
             cd ..
       - run:
-          name: Test 
+          name: Build and test pytorch/tvm
           command: |
             source env/bin/activate
             cd tvm
