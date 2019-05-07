@@ -6,6 +6,7 @@ jobs:
     resource_class: 2xlarge+
     steps:
       - checkout
+      - working_directory: ~/
       - run:
           name: Install dependencies
           command: |
