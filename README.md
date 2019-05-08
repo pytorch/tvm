@@ -1,4 +1,7 @@
 # Pytorch TVM Extension
+[![CircleCI](https://circleci.com/gh/pytorch/tvm.svg?style=svg)](https://circleci.com/gh/pytorch/tvm)
+
+Please note that this is a work in progress.
 
 
 ## Build
@@ -18,8 +21,6 @@ python setup.py install
 ```
 
 ## Test
-
-[![CircleCI](https://circleci.com/gh/pytorch/tvm.svg?style=svg)](https://circleci.com/gh/pytorch/tvm)
 
 ```
 python setup.py test 
