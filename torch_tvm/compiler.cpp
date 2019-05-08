@@ -206,6 +206,8 @@ void TVMCompiler::run(Stack& stack) {
     auto build_f = build_mod.GetFunction("build", false);
     auto json_f = build_mod.GetFunction("get_graph_json", false);
     auto mod_f = build_mod.GetFunction("get_module", false);
+    auto set_opt_level_f = build_mod.GetFunction("set_opt_level", false);
+    set_opt_level_f(3);
     tvm::Array<HalideIR::Expr> target_pair;
     target_pair.push_back(tvm::ir::StringImm::make("cpu"));
     target_pair.push_back(tvm::ir::StringImm::make("llvm"));
