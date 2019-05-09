@@ -152,8 +152,20 @@ class TestOperators(TVMTest):
         ref_out, tvm_out = self.runBoth(max_pool2d, X)
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
         ref_out, tvm_out = self.runBoth(max_pool2d_strides_padding_ceil_mode, X)
-        print(ref_out.size())
-        print(tvm_out.size())
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
+
+    @TVMTest.given(
+        shape=TVMTest.rand_shape(rank=2, min_dim=4),
+        out_features=TVMTest.rand_int(3, 6),
+    )
+    def test_linear(self, shape, out_features):
+        input = torch.rand(shape)
+        weight = torch.rand(out_features, shape[1])
+        bias = torch.rand(out_features)
+        def linear(input, weight, bias):
+            return F.linear(input, weight, bias) + 2.0
+
+        ref_out, tvm_out = self.runBoth(linear, input, weight, bias)
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
 
