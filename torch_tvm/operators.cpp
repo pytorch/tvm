@@ -1,5 +1,6 @@
 #include "operators.h"
 #include <tvm/relay/attrs/nn.h>
+#include <tvm/relay/attrs/transform.h>
 
 using namespace torch::jit;
 
@@ -277,6 +278,20 @@ RegisterTVMOperator reg({
 
        static const tvm::relay::Op& op = tvm::relay::Op::Get("nn.max_pool2d");
        auto out = tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(pool_attrs), {});
+       return out;
+     }},
+    {Symbol::fromQualString("aten::linear"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       auto dense_attrs = tvm::make_node<tvm::relay::DenseAttrs>();
+       auto out = tvm::relay::CallNode::make(tvm::relay::Op::Get("nn.dense"), {inputs[0], inputs[1]}, tvm::Attrs(dense_attrs), {});
+
+       if (!relayIsNone(inputs[2])) {
+         auto bias_add_op = tvm::relay::Op::Get("nn.bias_add");
+         auto bias_add_attrs = tvm::make_node<tvm::relay::BiasAddAttrs>();
+         bias_add_attrs->axis = 1;
+         return tvm::relay::CallNode::make(
+             bias_add_op, {out, inputs[2]}, tvm::Attrs(bias_add_attrs), {});
+       }
        return out;
      }},
 });
