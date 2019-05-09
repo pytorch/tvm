@@ -70,4 +70,6 @@ To disable the JIT hooks, use `torch_tvm.disable()`.
 - Tensor manipulation
   - [ ] Reshape
   - [ ] Views
-
+- Tooling
+  - [ ] Model coverage checks
+  - [ ] Benchmarks for master
