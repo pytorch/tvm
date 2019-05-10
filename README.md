@@ -6,10 +6,10 @@ Please note that this is a work in progress.
 
 ## Build
 
-You'll need to build PyTorch on top of this PR: https://github.com/pytorch/pytorch/pull/18588
+You'll need to build PyTorch on top of this PR: https://github.com/pytorch/pytorch/pull/20284
 ```
 cd pytorch
-git fetch origin pull/18588/head:tvm_dev
+git fetch origin pull/20284/head:tvm_dev
 git checkout tvm_dev
 python setup.py install
 ```
@@ -66,7 +66,7 @@ To disable the JIT hooks, use `torch_tvm.disable()`.
   - [x] Relu
   - [x] AveragePool
   - [x] MaxPool
-  - [ ] Linear
+  - [x] Linear
 - Tensor manipulation
   - [ ] Reshape
   - [ ] Views
