@@ -132,9 +132,21 @@ RegisterTVMOperator reg({
        conv_attrs->groups = relayToConstant<int>(inputs[8]);
        conv_attrs->data_layout = "NCHW";
        conv_attrs->kernel_layout = "OIHW";
-       // kernel size information should already embed in the weight shape
-       // TODO: figure out kernel size usage in tvm
+
        conv_attrs->kernel_size = tvm::NullValue<tvm::Array<tvm::relay::IndexExpr>>();
+       // If the input was a complete tensor type than we have information to populate the
+       // kernel
+       if (const tvm::relay::VarNode* var = inputs[1].as<tvm::relay::VarNode>()) {
+         auto* w_t = var->type_annotation.as<tvm::relay::TensorTypeNode>();
+         AT_ASSERT(w_t);
+         auto shape = w_t->shape;
+         tvm::Array<tvm::relay::IndexExpr> w_sizes = {
+               shape[2],
+               shape[3]
+         };
+         conv_attrs->kernel_size = w_sizes;
+       }
+
        conv_attrs->strides = relayToIntList(inputs[3]);
        conv_attrs->padding = relayToIntList(inputs[4]);
        conv_attrs->dilation = relayToIntList(inputs[5]);
