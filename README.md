@@ -1,3 +1,5 @@
+<img align="right" width="400" src="http://ec2-3-14-143-1.us-east-2.compute.amazonaws.com/benchmarks.png">
+
 # Pytorch TVM Extension
 [![CircleCI](https://circleci.com/gh/pytorch/tvm.svg?style=svg)](https://circleci.com/gh/pytorch/tvm)
 
