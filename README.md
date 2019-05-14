@@ -74,9 +74,9 @@ Below, in order, is a prioritized list of tasks for this repository.
 - [x] Tooling
   - [x] Model coverage checks
   - [x] Benchmarks for master
-- [ ] User exposed configurations
-  - [ ] Backend selection (CPU/Cuda/OpenCL)
-  - [ ] Optimization level
+- [x] User exposed configurations
+  - [x] Backend selection (CPU/Cuda/OpenCL)
+  - [x] Optimization level
 - [ ] Custom TVM operator registration
   - Enable Python/C++ mechanism to use custom TVM operators and schedules
 - [ ] Bail-out mechanism

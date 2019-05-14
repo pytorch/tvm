@@ -328,21 +328,7 @@ RegisterTVMOperator reg({
      }},
 });
 
-// flag to control whether to enable tvm fusion, default to false
-static bool tvm_fusion_enabled = false;
-
-void setEnabled(bool flag) {
-  tvm_fusion_enabled = flag;
-}
-
-bool isEnabled() {
-  return tvm_fusion_enabled;
-}
-
 bool isSupported(Node* node) {
-  if (!tvm_fusion_enabled) {
-    return false;
-  }
   auto map = getTVMOperatorMap();
   auto can_handle = map.find(node->kind()) != map.end();
   if (node->kind() == prim::Constant) { can_handle = true; }
