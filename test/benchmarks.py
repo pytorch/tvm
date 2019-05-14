@@ -49,7 +49,7 @@ def benchmark(model, csv_file, input_fn=genImage, iters=100, warmup=10):
         for p in prof.key_averages():
           total_profiled_time += int(p.cpu_time)
           if p.key == "TVM":
-            tvm_profiled_time = int(p.cpu_time)
+            tvm_profiled_time += int(p.cpu_time)
         print("Done benchmarking TVM, which compiled {:.2f}% of compute".format(100 * tvm_profiled_time / total_profiled_time))
         if csv_file:
           exists = os.path.isfile(csv_file)

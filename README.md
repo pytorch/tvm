@@ -7,7 +7,7 @@ Please note that this is a work in progress.
 
 ## Build
 
-You'll need to build PyTorch on top of this PR: https://github.com/pytorch/pytorch/pull/20284
+For improved performance, you'll need to build PyTorch on top of this PR: https://github.com/pytorch/pytorch/pull/20284
 ```
 cd pytorch
 git fetch origin pull/20284/head:tvm_dev
@@ -15,7 +15,9 @@ git checkout tvm_dev
 python setup.py install
 ```
 
-Then, you'll need to build this repo seperately
+Otherwise, install the latest Nightly build of PyTorch.
+
+Then, build this repo
 ```
 # Make sure the right llvm-config is in your PATH
 python setup.py install
@@ -52,14 +54,12 @@ To disable the JIT hooks, use `torch_tvm.disable()`.
 
 ![TVM Integration](https://github.com/pytorch/tvm/blob/master/pt_execution.png?raw=true)
 
-## TODO
+## v0.1 Roadmap
 
-- Add ability to register translations from opaque op names to TVM (as is done in `operator.cpp`) from Python.
-- Zero copy `set_input`
-- Bail-out mechanism (invoke PyTorch JIT fallback)
-- Threadpool integration
-- Allocator integration
-- Operator translation
+Below, in order, is a prioritized list of tasks for this repository.
+
+- [x] End to end build and runtime
+- [ ] Operator translation
   - [x] Add
   - [x] Multiply
   - [x] Convolution
@@ -68,9 +68,23 @@ To disable the JIT hooks, use `torch_tvm.disable()`.
   - [x] AveragePool
   - [x] MaxPool
   - [x] Linear
-- Tensor manipulation
-  - [ ] Reshape
   - [ ] Views
-- Tooling
-  - [ ] Model coverage checks
-  - [ ] Benchmarks for master
+- [x] Tooling
+  - [x] Model coverage checks
+  - [x] Benchmarks for master
+- [ ] User exposed configurations
+  - [ ] Backend selection (CPU/Cuda/OpenCL)
+  - [ ] Optimization level
+- [ ] Custom TVM operator registration
+  - Enable Python/C++ mechanism to use custom TVM operators and schedules
+- [ ] Bail-out mechanism
+  - When TVM cannot compile a subgraph, invoke PyTorch JIT fallback
+- [ ] Zero copy `set_input`
+- [ ] Subsystem integration
+  - [ ] Threadpool integration
+  - [ ] Allocator integration
+  - [ ] Distributed communication
+- [ ] Advanced IR integration
+  - [ ] Control flow
+  - [ ] Aliasing
+
