@@ -3,6 +3,7 @@
 
 #include <ATen/DLConvertor.h>
 #include <torch/csrc/jit/constants.h>
+#include <torch/csrc/jit/interpreter.h>
 #include <limits>
 
 using namespace torch::jit;
@@ -173,10 +174,12 @@ tvm::relay::Function TVMCompiler::convertToRelay(
 TVMCompiler::TVMCompiler(
     const Node* node,
     int opt_level,
+    bool strict,
     std::string device_type,
     std::string device,
     std::string host)
     : opt_level_(opt_level),
+      strict_(strict),
       device_type_(device_type),
       device_(device),
       host_(host) {
@@ -191,13 +194,8 @@ TVMCompiler::TVMCompiler(
 
 void TVMCompiler::run(Stack& stack) {
   std::unordered_map<Value*, IValue> value_to_ivalue;
-  std::vector<IValue> inputs;
-
-  // Reverse the stack
-  for (const auto& input : subgraph_->inputs()) {
-    inputs.emplace(inputs.begin(), stack.back());
-    stack.pop_back();
-  }
+  int num_inputs = subgraph_->inputs().size();
+  at::ArrayRef<IValue> inputs = last(stack, num_inputs);
 
   for (auto i = 0; i < inputs.size(); ++i) {
     auto value_input = subgraph_->inputs()[i];
@@ -211,7 +209,20 @@ void TVMCompiler::run(Stack& stack) {
     for (auto& kv : value_to_ivalue) {
       kv.first->inferTypeFrom(kv.second.toTensor());
     }
-    auto func = convertToRelay(subgraph_, &input_values_);
+    // bail out mechanism: try to convert to Relay, if it fails to convert the graph
+    // by any reason(i.e. op difference), depend on the user preference, either throw
+    // or fall back to the JIT interpreter for execution
+    tvm::relay::Function tvm_func;
+    try {
+      tvm_func = convertToRelay(subgraph_, &input_values_);
+    } catch(const std::exception& e) {
+      if (strict_) {
+        AT_ERROR("Pytorch TVM: fail to convert to relay, exception: ", e.what());
+      }
+      LOG(WARNING) << "Pytorch TVM: fail to convert to relay, falling back to JIT for execution, exception: "<< e.what() << "\n";
+      InterpreterState(Code(subgraph_)).run(stack);
+      return;
+    }
     auto pfb = tvm::runtime::Registry::Get("relay.build_module._BuildModule");
     AT_ASSERT(pfb);
     tvm::runtime::Module build_mod = (*pfb)();
@@ -223,7 +234,7 @@ void TVMCompiler::run(Stack& stack) {
     tvm::Array<HalideIR::Expr> target_pair;
     target_pair.push_back(tvm::ir::StringImm::make(device_type_));
     target_pair.push_back(tvm::ir::StringImm::make(device_));
-    build_f(func, target_pair, host_);
+    build_f(tvm_func, target_pair, host_);
     std::string json = json_f();
     tvm::runtime::Module mod = mod_f();
     auto pfr = tvm::runtime::Registry::Get("tvm.graph_runtime.create");
@@ -253,6 +264,8 @@ void TVMCompiler::run(Stack& stack) {
 
   cache_[spec].kernel();
 
+  // clean the stack and add outputs to the stack
+  drop(stack, num_inputs);
   int i = 0;
   for (const auto& output : subgraph_->outputs()) {
     tvm::runtime::NDArray ret_val = cache_[spec].get_output(i++);
