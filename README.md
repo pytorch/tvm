@@ -83,6 +83,7 @@ Below, in order, is a prioritized list of tasks for this repository.
   
 ### v0.2 Plan
 
+- [ ] View support
 - [ ] Zero copy `set_input`
 - [ ] Subsystem integration
   - [ ] Threadpool integration
