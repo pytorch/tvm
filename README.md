@@ -59,7 +59,7 @@ To disable the JIT hooks, use `torch_tvm.disable()`.
 Below, in order, is a prioritized list of tasks for this repository.
 
 - [x] End to end build and runtime
-- [ ] Operator translation
+- [x] Operator translation
   - [x] Add
   - [x] Multiply
   - [x] Convolution
@@ -70,7 +70,6 @@ Below, in order, is a prioritized list of tasks for this repository.
   - [x] Linear
   - [x] Reshape
   - [x] AdaptiveAveragePool
-  - [ ] Views
 - [x] Tooling
   - [x] Model coverage checks
   - [x] Benchmarks for master
@@ -81,6 +80,9 @@ Below, in order, is a prioritized list of tasks for this repository.
   - Enable Python/C++ mechanism to use custom TVM operators and schedules
 - [ ] Bail-out mechanism
   - When TVM cannot compile a subgraph, invoke PyTorch JIT fallback
+  
+### v0.2 Plan
+
 - [ ] Zero copy `set_input`
 - [ ] Subsystem integration
   - [ ] Threadpool integration
