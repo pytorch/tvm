@@ -170,9 +170,21 @@ tvm::relay::Function TVMCompiler::convertToRelay(
       input_vars, output, tvm::relay::Type(), {});
 }
 
-TVMCompiler::TVMCompiler(const Node* node) {
-  // TODO support gpu
-  ctx_.device_type = kDLCPU;
+TVMCompiler::TVMCompiler(
+    const Node* node,
+    int opt_level,
+    std::string device_type,
+    std::string device,
+    std::string host)
+    : opt_level_(opt_level),
+      device_type_(device_type),
+      device_(device),
+      host_(host) {
+  if (device_type_ == "gpu") {
+    ctx_.device_type = kDLGPU;
+  } else {
+    ctx_.device_type = kDLCPU;
+  }
   ctx_.device_id = 0;
   subgraph_ = node->g(attr::Subgraph);
 }
@@ -207,11 +219,11 @@ void TVMCompiler::run(Stack& stack) {
     auto json_f = build_mod.GetFunction("get_graph_json", false);
     auto mod_f = build_mod.GetFunction("get_module", false);
     auto set_opt_level_f = build_mod.GetFunction("set_opt_level", false);
-    set_opt_level_f(3);
+    set_opt_level_f(opt_level_);
     tvm::Array<HalideIR::Expr> target_pair;
-    target_pair.push_back(tvm::ir::StringImm::make("cpu"));
-    target_pair.push_back(tvm::ir::StringImm::make("llvm"));
-    build_f(func, target_pair, "llvm -mcpu=core-avx2");
+    target_pair.push_back(tvm::ir::StringImm::make(device_type_));
+    target_pair.push_back(tvm::ir::StringImm::make(device_));
+    build_f(func, target_pair, host_);
     std::string json = json_f();
     tvm::runtime::Module mod = mod_f();
     auto pfr = tvm::runtime::Registry::Get("tvm.graph_runtime.create");

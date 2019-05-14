@@ -15,13 +15,22 @@ struct TVMObject {
 };
 
 struct TVMCompiler {
-  TVMCompiler(const torch::jit::Node* node);
+  TVMCompiler(
+      const torch::jit::Node* node,
+      int opt_level = 2,
+      std::string device_type = "cpu",
+      std::string device = "llvm",
+      std::string host = "llvm");
   void run(torch::jit::Stack& stack);
 
  private:
   std::shared_ptr<torch::jit::Graph> subgraph_;
   std::unordered_map<torch::jit::CompleteArgumentSpec, TVMObject> cache_;
   TVMContext ctx_;
+  int opt_level_;
+  std::string device_type_;
+  std::string device_;
+  std::string host_;
 
   tvm::relay::Var convertToRelay(torch::jit::Value* val);
   tvm::relay::Expr convertToRelay(const torch::jit::IValue& val);
