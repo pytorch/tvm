@@ -30,7 +30,7 @@ def benchmark(model, csv_file, input_fn=genImage, iters=100, warmup=10):
       print("Done benchmarking JIT")
 
       with autotvm.apply_history_best("test/autotvm_tuning.log"):
-        torch_tvm.enable()
+        torch_tvm.enable(opt_level=3)
         print("Tracing model with TVM")
         trace_tvm = torch.jit.trace(model, inputs)
         print("Warming TVM up with {} iters".format(warmup))
