@@ -3,6 +3,7 @@
 
 #include <ATen/DLConvertor.h>
 #include <torch/csrc/jit/constants.h>
+#include <torch/csrc/jit/interpreter.h>
 #include <limits>
 
 using namespace torch::jit;
@@ -179,13 +180,8 @@ TVMCompiler::TVMCompiler(const Node* node) {
 
 void TVMCompiler::run(Stack& stack) {
   std::unordered_map<Value*, IValue> value_to_ivalue;
-  std::vector<IValue> inputs;
-
-  // Reverse the stack
-  for (const auto& input : subgraph_->inputs()) {
-    inputs.emplace(inputs.begin(), stack.back());
-    stack.pop_back();
-  }
+  int num_inputs = subgraph_->inputs().size();
+  at::ArrayRef<IValue> inputs = last(stack, num_inputs);
 
   for (auto i = 0; i < inputs.size(); ++i) {
     auto value_input = subgraph_->inputs()[i];
@@ -199,7 +195,16 @@ void TVMCompiler::run(Stack& stack) {
     for (auto& kv : value_to_ivalue) {
       kv.first->inferTypeFrom(kv.second.toTensor());
     }
-    auto func = convertToRelay(subgraph_, &input_values_);
+    // bail out mechanism: try to convert to Relay, if it fails to convert the graph
+    // by any reason(i.e. op difference), fall back to the JIT interpreter for execution
+    tvm::relay::Function tvm_func;
+    try {
+      tvm_func = convertToRelay(subgraph_, &input_values_);
+    } catch(const std::exception& e) {
+      LOG(WARNING) << "Pytorch TVM: could not convert the graph to relay, falling back to JIT for execution";
+      InterpreterState(Code(subgraph_)).run(stack);
+      return;
+    }
     auto pfb = tvm::runtime::Registry::Get("relay.build_module._BuildModule");
     AT_ASSERT(pfb);
     tvm::runtime::Module build_mod = (*pfb)();
@@ -211,7 +216,7 @@ void TVMCompiler::run(Stack& stack) {
     tvm::Array<HalideIR::Expr> target_pair;
     target_pair.push_back(tvm::ir::StringImm::make("cpu"));
     target_pair.push_back(tvm::ir::StringImm::make("llvm"));
-    build_f(func, target_pair, "llvm -mcpu=core-avx2");
+    build_f(tvm_func, target_pair, "llvm -mcpu=core-avx2");
     std::string json = json_f();
     tvm::runtime::Module mod = mod_f();
     auto pfr = tvm::runtime::Registry::Get("tvm.graph_runtime.create");
@@ -241,6 +246,8 @@ void TVMCompiler::run(Stack& stack) {
 
   cache_[spec].kernel();
 
+  // clean the stack and add outputs to the stack
+  drop(stack, num_inputs);
   int i = 0;
   for (const auto& output : subgraph_->outputs()) {
     tvm::runtime::NDArray ret_val = cache_[spec].get_output(i++);
