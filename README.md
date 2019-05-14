@@ -68,6 +68,8 @@ Below, in order, is a prioritized list of tasks for this repository.
   - [x] AveragePool
   - [x] MaxPool
   - [x] Linear
+  - [x] Reshape
+  - [ ] AdaptiveAveragePool
   - [ ] Views
 - [x] Tooling
   - [x] Model coverage checks
