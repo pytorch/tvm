@@ -279,6 +279,15 @@ RegisterTVMOperator reg({
        auto out = tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(pool_attrs), {});
        return out;
      }},
+    {Symbol::fromQualString("aten::adaptive_avg_pool2d"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       static const tvm::relay::Op& op = tvm::relay::Op::Get("contrib.adaptive_avg_pool2d");
+       auto pool_attrs = tvm::make_node<tvm::relay::AdaptivePool2DAttrs>();
+       pool_attrs->output_size = relayToArray<tvm::relay::IndexExpr>(inputs[1]);
+       pool_attrs->layout = "NCHW";
+       auto out = tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(pool_attrs), {});
+       return out;
+     }},
     {Symbol::fromQualString("aten::max_pool2d"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto pool_attrs = tvm::make_node<tvm::relay::MaxPool2DAttrs>();
