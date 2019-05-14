@@ -1,5 +1,6 @@
 #include "operators.h"
 #include <tvm/relay/attrs/nn.h>
+#include <tvm/relay/attrs/transform.h>
 
 using namespace torch::jit;
 
@@ -65,9 +66,10 @@ uint64_t getNoneSentinel() {
   return 0xe4fa3adecabcf036;
 }
 
-tvm::Array<tvm::relay::IndexExpr> relayToIntList(tvm::relay::Expr e) {
+template <typename T>
+tvm::Array<T> relayToArray(tvm::relay::Expr e) {
   auto t = e.as<tvm::relay::TupleNode>();
-  tvm::Array<tvm::relay::IndexExpr> elems;
+  tvm::Array<T> elems;
   for (auto c: t->fields) {
     int elem = relayToConstant<int>(c);
     elems.push_back(elem);
@@ -147,9 +149,9 @@ RegisterTVMOperator reg({
          conv_attrs->kernel_size = w_sizes;
        }
 
-       conv_attrs->strides = relayToIntList(inputs[3]);
-       conv_attrs->padding = relayToIntList(inputs[4]);
-       conv_attrs->dilation = relayToIntList(inputs[5]);
+       conv_attrs->strides = relayToArray<tvm::relay::IndexExpr>(inputs[3]);
+       conv_attrs->padding = relayToArray<tvm::relay::IndexExpr>(inputs[4]);
+       conv_attrs->dilation = relayToArray<tvm::relay::IndexExpr>(inputs[5]);
 
        auto out = tvm::relay::CallNode::make(
            op, new_inputs, tvm::Attrs(conv_attrs), {});
@@ -261,15 +263,15 @@ RegisterTVMOperator reg({
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("nn.avg_pool2d");
        auto pool_attrs = tvm::make_node<tvm::relay::AvgPool2DAttrs>();
-       pool_attrs->pool_size = relayToIntList(inputs[1]);
-       auto strides = relayToIntList(inputs[2]);
+       pool_attrs->pool_size = relayToArray<tvm::relay::IndexExpr>(inputs[1]);
+       auto strides = relayToArray<tvm::relay::IndexExpr>(inputs[2]);
        if (strides.size() == 0) {
          // pytorch avg_pool2d semantic: strides default to pool size
          pool_attrs->strides = pool_attrs->pool_size;
        } else {
          pool_attrs->strides = strides;
        }
-       pool_attrs->padding = relayToIntList(inputs[3]);
+       pool_attrs->padding = relayToArray<tvm::relay::IndexExpr>(inputs[3]);
        pool_attrs->layout = "NCHW";
        pool_attrs->ceil_mode = relayToConstant<bool>(inputs[4]);
        pool_attrs->count_include_pad = relayToConstant<bool>(inputs[5]);
@@ -280,21 +282,34 @@ RegisterTVMOperator reg({
     {Symbol::fromQualString("aten::max_pool2d"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto pool_attrs = tvm::make_node<tvm::relay::MaxPool2DAttrs>();
-       pool_attrs->pool_size = relayToIntList(inputs[1]);
-       auto strides = relayToIntList(inputs[2]);
+       pool_attrs->pool_size = relayToArray<tvm::relay::IndexExpr>(inputs[1]);
+       auto strides = relayToArray<tvm::relay::IndexExpr>(inputs[2]);
        if (strides.size() == 0) {
          // pytorch max_pool2d semantic: strides default to pool size
          pool_attrs->strides = pool_attrs->pool_size;
        } else {
          pool_attrs->strides = strides;
        }
-       pool_attrs->padding = relayToIntList(inputs[3]);
+       pool_attrs->padding = relayToArray<tvm::relay::IndexExpr>(inputs[3]);
        pool_attrs->layout = "NCHW";
        // TODO: tvm has no dialtion but pytorch has, handle dilation
        pool_attrs->ceil_mode = relayToConstant<bool>(inputs[5]);
 
        static const tvm::relay::Op& op = tvm::relay::Op::Get("nn.max_pool2d");
        auto out = tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(pool_attrs), {});
+       return out;
+     }},
+    {Symbol::fromQualString("aten::reshape"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       auto op = tvm::relay::Op::Get("reshape");
+       auto attrs = tvm::make_node<tvm::relay::ReshapeAttrs>();
+       attrs->newshape = relayToArray<tvm::Integer>(inputs[1]);
+       AT_ASSERT(attrs->newshape.size() > 0);
+       if (static_cast<int64_t>(attrs->newshape[0]) == -1) {
+         LOG(WARNING) << "WARNING: reshape with -1 as the first value has known incompatibility with PyTorch semantics.\n";
+       }
+       attrs->reverse = false;
+       auto out = tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(attrs), {});
        return out;
      }},
     {Symbol::fromQualString("aten::linear"),
