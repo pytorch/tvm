@@ -59,7 +59,7 @@ To disable the JIT hooks, use `torch_tvm.disable()`.
 Below, in order, is a prioritized list of tasks for this repository.
 
 - [x] End to end build and runtime
-- [-] Operator translation
+- [ ] Operator translation
   - [x] Add
   - [x] Multiply
   - [x] Convolution
