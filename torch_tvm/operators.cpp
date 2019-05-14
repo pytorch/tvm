@@ -306,7 +306,7 @@ RegisterTVMOperator reg({
        attrs->newshape = relayToArray<tvm::Integer>(inputs[1]);
        AT_ASSERT(attrs->newshape.size() > 0);
        if (static_cast<int64_t>(attrs->newshape[0]) == -1) {
-         LOG(WARNING) << "WARNING: reshape with -1 as the first value has known issues.\n";
+         LOG(WARNING) << "WARNING: reshape with -1 as the first value has known incompatibility with PyTorch semantics.\n";
        }
        attrs->reverse = false;
        auto out = tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(attrs), {});
