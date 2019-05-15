@@ -131,6 +131,17 @@ class TestOperators(TVMTest):
         ref_out, tvm_out = self.runBoth(avg_pool2d_strides, X)
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
+    @TVMTest.given(
+        shape=TVMTest.rand_shape(rank=4, min_dim=4),
+    )
+    def test_adaptive_avg_pool2d(self, shape):
+        X = torch.rand(shape)
+
+        def adaptive_avg_pool2d(a):
+            return F.adaptive_avg_pool2d(a, 3)
+
+        ref_out, tvm_out = self.runBoth(adaptive_avg_pool2d, X)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
     # Known bug -- ceil_mode=True sometimes has mismatched shapes
     @TVMTest.given(
@@ -166,6 +177,36 @@ class TestOperators(TVMTest):
             return F.linear(input, weight, bias) + 2.0
 
         ref_out, tvm_out = self.runBoth(linear, input, weight, bias)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
+
+    @TVMTest.given(
+        shape=TVMTest.rand_shape(rank=2, min_dim=4),
+    )
+    def test_reshape(self, shape):
+        input = torch.rand(shape)
+
+        def reshape(input):
+            return torch.reshape(input, (-1,))
+
+        ref_out, tvm_out = self.runBoth(reshape, input)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
+
+        def reshape(input):
+            return torch.reshape(input, (1, 1, *shape))
+
+        ref_out, tvm_out = self.runBoth(reshape, input)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
+
+        def reshape(input):
+            return torch.reshape(input, (1, -1))
+
+        ref_out, tvm_out = self.runBoth(reshape, input)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
+
+        def reshape(input):
+            return torch.reshape(input, (shape[0], 1, 1, shape[1]))
+
+        ref_out, tvm_out = self.runBoth(reshape, input)
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
 

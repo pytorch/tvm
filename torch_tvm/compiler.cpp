@@ -171,9 +171,23 @@ tvm::relay::Function TVMCompiler::convertToRelay(
       input_vars, output, tvm::relay::Type(), {});
 }
 
-TVMCompiler::TVMCompiler(const Node* node) {
-  // TODO support gpu
-  ctx_.device_type = kDLCPU;
+TVMCompiler::TVMCompiler(
+    const Node* node,
+    int opt_level,
+    bool strict,
+    std::string device_type,
+    std::string device,
+    std::string host)
+    : opt_level_(opt_level),
+      strict_(strict),
+      device_type_(device_type),
+      device_(device),
+      host_(host) {
+  if (device_type_ == "gpu") {
+    ctx_.device_type = kDLGPU;
+  } else {
+    ctx_.device_type = kDLCPU;
+  }
   ctx_.device_id = 0;
   subgraph_ = node->g(attr::Subgraph);
 }
@@ -196,12 +210,17 @@ void TVMCompiler::run(Stack& stack) {
       kv.first->inferTypeFrom(kv.second.toTensor());
     }
     // bail out mechanism: try to convert to Relay, if it fails to convert the graph
-    // by any reason(i.e. op difference), fall back to the JIT interpreter for execution
+    // by any reason(i.e. op difference), depend on the user preference, either throw
+    // or fall back to the JIT interpreter for execution
     tvm::relay::Function tvm_func;
     try {
       tvm_func = convertToRelay(subgraph_, &input_values_);
     } catch(const std::exception& e) {
-      LOG(WARNING) << "Pytorch TVM: could not convert the graph to relay, falling back to JIT for execution";
+      if (strict_) {
+        LOG(ERROR) << "Pytorch TVM: fail to convert to relay, exception: " << e.what() << "\n";
+        throw;
+      }
+      LOG(WARNING) << "Pytorch TVM: fail to convert to relay, falling back to JIT for execution, exception: " << e.what() << "\n";
       InterpreterState(Code(subgraph_)).run(stack);
       return;
     }
@@ -212,11 +231,11 @@ void TVMCompiler::run(Stack& stack) {
     auto json_f = build_mod.GetFunction("get_graph_json", false);
     auto mod_f = build_mod.GetFunction("get_module", false);
     auto set_opt_level_f = build_mod.GetFunction("set_opt_level", false);
-    set_opt_level_f(3);
+    set_opt_level_f(opt_level_);
     tvm::Array<HalideIR::Expr> target_pair;
-    target_pair.push_back(tvm::ir::StringImm::make("cpu"));
-    target_pair.push_back(tvm::ir::StringImm::make("llvm"));
-    build_f(tvm_func, target_pair, "llvm -mcpu=core-avx2");
+    target_pair.push_back(tvm::ir::StringImm::make(device_type_));
+    target_pair.push_back(tvm::ir::StringImm::make(device_));
+    build_f(tvm_func, target_pair, host_);
     std::string json = json_f();
     tvm::runtime::Module mod = mod_f();
     auto pfr = tvm::runtime::Registry::Get("tvm.graph_runtime.create");
