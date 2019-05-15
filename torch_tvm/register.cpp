@@ -12,10 +12,10 @@ namespace py = pybind11;
 using namespace torch::jit;
 
 static bool fusion_enabled = false;
-static int opt_level = 2;
-static std::string device_type = "cpu";
-static std::string device = "llvm -mcpu=core-avx2";
-static std::string host = "llvm -mcpu=core-avx2";
+static int opt_level = PT_TVM_DEFAULT_OPT_LEVEL;
+static std::string device_type = PT_TVM_DEFAULT_DEVICE_TYPE;
+static std::string device = PT_TVM_DEFAULT_DEVICE;
+static std::string host = PT_TVM_DEFAULT_HOST;
 PYBIND11_MODULE(_torch_tvm, m) {
   auto tvm_sym = Symbol::fromQualString("tvm::CompilationGroup");
 
@@ -55,10 +55,10 @@ PYBIND11_MODULE(_torch_tvm, m) {
         device = device_;
         host = host_;
       },
-      py::arg("opt_level") = 2,
-      py::arg("device_type") = "cpu",
-      py::arg("device") = "llvm -mcpu=core-avx2",
-      py::arg("host") = "llvm -mcpu=core-avx2");
+      py::arg("opt_level") = PT_TVM_DEFAULT_OPT_LEVEL,
+      py::arg("device_type") = PT_TVM_DEFAULT_DEVICE_TYPE,
+      py::arg("device") = PT_TVM_DEFAULT_DEVICE,
+      py::arg("host") = PT_TVM_DEFAULT_HOST);
 
   m.def("disable", []() { fusion_enabled = false; });
 

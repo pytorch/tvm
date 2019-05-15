@@ -14,13 +14,18 @@ struct TVMObject {
   tvm::PackedFunc get_output;
 };
 
+#define PT_TVM_DEFAULT_OPT_LEVEL 3
+#define PT_TVM_DEFAULT_DEVICE_TYPE "cpu"
+#define PT_TVM_DEFAULT_DEVICE "llvm"
+#define PT_TVM_DEFAULT_HOST "llvm -mcpu=core-avx2"
+
 struct TVMCompiler {
   TVMCompiler(
       const torch::jit::Node* node,
-      int opt_level = 2,
-      std::string device_type = "cpu",
-      std::string device = "llvm",
-      std::string host = "llvm");
+      int opt_level = PT_TVM_DEFAULT_OPT_LEVEL,
+      std::string device_type = PT_TVM_DEFAULT_DEVICE_TYPE,
+      std::string device = PT_TVM_DEFAULT_DEVICE,
+      std::string host = PT_TVM_DEFAULT_HOST);
   void run(torch::jit::Stack& stack);
 
  private:
