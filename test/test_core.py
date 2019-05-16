@@ -45,22 +45,26 @@ class TestCore(TVMTest):
 
     @TVMTest.given(
         shape=TVMTest.rand_shape(rank=4, min_dim=4),
-        stride=TVMTest.rand_list(TVMTest.rand_int(3, 4), 2),
+        examples=1
     )
-    def test_fall_back(self, shape, stride):
+    def test_fall_back(self, shape):
         inputs = torch.rand(shape)
-        def avg_pool2d_strides(a):
-            return F.avg_pool2d(
-                a, 2, stride=stride
-            )
 
-        trace_jit = torch.jit.trace(avg_pool2d_strides, inputs)
-        jit_out = trace_jit(inputs)
+        def reshape(input):
+            return torch.reshape(input, (-1,))
+
+        jit_script_reshape = torch.jit.script(reshape)
+        jit_out = jit_script_reshape(inputs)
+
+        with self.assertRaises(RuntimeError):
+            tvm_strict_script_reshape = torch.jit.script(reshape)
+            torch_tvm.enable(strict=True)
+            tvm_out = tvm_strict_script_reshape(inputs)
+            torch_tvm.disable()
 
         torch_tvm.enable(strict=False)
-        trace_tvm = torch.jit.trace(avg_pool2d_strides, inputs)
-        print(trace_tvm.graph_for(inputs))
-        tvm_out = trace_tvm(inputs)
-
+        tvm_script_reshape = torch.jit.script(reshape)
+        tvm_out = tvm_script_reshape(inputs)
         torch_tvm.disable()
+
         torch.testing.assert_allclose(jit_out, tvm_out, rtol=0.01, atol=0.01)

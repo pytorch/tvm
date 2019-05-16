@@ -217,10 +217,9 @@ void TVMCompiler::run(Stack& stack) {
       tvm_func = convertToRelay(subgraph_, &input_values_);
     } catch(const std::exception& e) {
       if (strict_) {
-        LOG(ERROR) << "Pytorch TVM: fail to convert to relay, exception: " << e.what() << "\n";
-        throw;
+        AT_ERROR("Pytorch TVM: fail to convert to relay, exception: ", e.what());
       }
-      LOG(WARNING) << "Pytorch TVM: fail to convert to relay, falling back to JIT for execution, exception: " << e.what() << "\n";
+      LOG(WARNING) << "Pytorch TVM: fail to convert to relay, falling back to JIT for execution, exception: "<< e.what() << "\n";
       InterpreterState(Code(subgraph_)).run(stack);
       return;
     }

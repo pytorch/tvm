@@ -42,7 +42,15 @@ def benchmark(model, csv_file, input_fn=genImage, iters=100, warmup=10):
         for _ in range(iters):
           _ = trace_tvm(*inputs)
         tvm_time = time.time() - start
-        print("Done benchmarking TVM")
+        with torch.autograd.profiler.profile() as prof:
+          _ = trace_tvm(*inputs)
+        tvm_profiled_time = 0
+        total_profiled_time = 0
+        for p in prof.key_averages():
+          total_profiled_time += int(p.cpu_time)
+          if p.key == "TVM":
+            tvm_profiled_time += int(p.cpu_time)
+        print("Done benchmarking TVM, which compiled {:.2f}% of compute".format(100 * tvm_profiled_time / total_profiled_time))
         if csv_file:
           exists = os.path.isfile(csv_file)
           with open(csv_file, 'a' if exists else 'w') as f:

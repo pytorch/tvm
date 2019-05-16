@@ -253,7 +253,6 @@ RegisterTVMOperator reg({
     {Symbol::fromQualString("aten::mul"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("multiply");
-       // registerSchedule("multiply");
        auto out = tvm::relay::CallNode::make(op, inputs, tvm::Attrs(), {});
        return out;
      }},
@@ -312,9 +311,8 @@ RegisterTVMOperator reg({
        auto attrs = tvm::make_node<tvm::relay::ReshapeAttrs>();
        attrs->newshape = relayToArray<tvm::Integer>(inputs[1]);
        AT_ASSERT(attrs->newshape.size() > 0);
-       if (static_cast<int64_t>(attrs->newshape[0]) == -1) {
-         LOG(WARNING) << "WARNING: reshape with -1 as the first value has known incompatibility with PyTorch semantics.\n";
-       }
+       AT_CHECK(static_cast<int64_t>(attrs->newshape[0]) != -1,
+                "WARNING: reshape with -1 as the first value has known incompatibility with PyTorch semantics.\n")
        attrs->reverse = false;
        auto out = tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(attrs), {});
        return out;
