@@ -1,6 +1,5 @@
 from test.util import TVMTest
 import torch
-import torch.nn.functional as F
 import torch_tvm
 
 class TestCore(TVMTest):
