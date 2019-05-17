@@ -78,7 +78,7 @@ Below, in order, is a prioritized list of tasks for this repository.
   - [x] Optimization level
 - [ ] Custom TVM operator registration
   - Enable Python/C++ mechanism to use custom TVM operators and schedules
-- [ ] Bail-out mechanism
+- [x] Bail-out mechanism
   - When TVM cannot compile a subgraph, invoke PyTorch JIT fallback
   
 ### v0.2 Plan
