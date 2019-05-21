@@ -77,10 +77,10 @@ PYBIND11_MODULE(_torch_tvm, m) {
           }}});
 
     auto relay_op = tvm::relay::Op::Get(relay_name);
-    AT_ASSERT(relay_op);
+    AT_CHECK(relay_op, "Cannot find Relay op ", relay_name);
     std::vector<Argument> torch_inputs;
     Graph wrapper_graph;
-    std::vector<Value *> graph_inputs;
+    std::vector<Value*> graph_inputs;
     for (auto i = 0; i < relay_op->num_inputs; ++i) {
       torch_inputs.emplace_back();
       graph_inputs.emplace_back(wrapper_graph.addInput());

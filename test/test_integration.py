@@ -18,15 +18,23 @@ class IntegrationTest(TVMTest):
           return d + e
         
         X = torch.randn(128,128)
-        print(test.graph)
-        print(test.graph_for(X,X))
-        o = test(X, X)
+        o1 = test(X, X)
 
+        torch_tvm.disable()
+
+        # Ensure eager mode works
         def test(a, b):
           d = torch.ops.tvm.woo(a)
           e = torch.ops.tvm.woo(b)
           return d + e
-        o = test(X, X)
+
+        o2 = test(X, X)
+        assert torch.allclose(o1, o2, rtol=0.01, atol=0.01)
+
+        # Ensure JIT and TVM JIT both work
+        ref_out, tvm_out = self.runBoth(reshape, X, X)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
+
 
 if __name__ == "__main__":
     unittest.main()
