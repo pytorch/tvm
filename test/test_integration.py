@@ -32,7 +32,7 @@ class IntegrationTest(TVMTest):
         assert torch.allclose(o1, o2, rtol=0.01, atol=0.01)
 
         # Ensure JIT and TVM JIT both work
-        ref_out, tvm_out = self.runBoth(reshape, X, X)
+        ref_out, tvm_out = self.runBoth(test, X, X)
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
 
