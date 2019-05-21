@@ -108,7 +108,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
                    return 0;
                  },
                  options);
-    RegisterOperators torch_register_ops({oo});
+    RegisterOperators torch_register_ops({torch_operator});
   });
 
   m.doc() = "This module does nothing but register a TVM backend.";
