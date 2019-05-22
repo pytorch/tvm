@@ -54,6 +54,39 @@ To disable the JIT hooks, use `torch_tvm.disable()`.
 
 ![TVM Integration](https://github.com/pytorch/tvm/blob/master/pt_execution.png?raw=true)
 
+## FAQ
+
+### How do I configure TVM compilation?
+
+All options are available as keyword arguments in the `enable` function exposed by `torch_tvm`.
+The optimization level, device type, device and host compilation targets are all exposed directly from TVM.
+
+```
+torch_tvm.enable(
+   opt_level=3,
+   device_type="cpu",
+   device="llvm",
+   host="llvm")
+```
+
+### How do I register a new TVM operator?
+
+First, ensure the operator is [registered with Relay](https://docs.tvm.ai/dev/relay_add_op.html#registering-an-operator).
+
+Then, register a map from PyTorch symbols to a Relay `CallNode` with `RegisterTVMOperator`.
+This can be done in any compilation unit provided it is linked into the final `torch_tvm` library.
+See [`torch_tvm/operators.cpp`](https://github.com/pytorch/tvm/blob/master/torch_tvm/operators.cpp) for examples.
+
+```
+RegisterTVMOperator reg_relu({
+    {Symbol::fromQualString("aten::relu"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       auto op = tvm::relay::Op::Get("nn.relu");
+       return tvm::relay::CallNode::make(op, inputs, tvm::Attrs(), {});
+     }},
+});
+```
+
 ## v0.1 Roadmap
 
 Below, in order, is a prioritized list of tasks for this repository.
