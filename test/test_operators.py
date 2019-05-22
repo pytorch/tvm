@@ -74,6 +74,31 @@ class TestOperators(TVMTest):
         ref_out, tvm_out = self.runBoth(conv, X, W)
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
+    @TVMTest.given(
+        shape=TVMTest.rand_shape(rank=3, min_dim=15),
+        kernel_size=TVMTest.rand_int(3, 8),
+        stride=TVMTest.rand_list(TVMTest.rand_int(1, 2), 2),
+        padding=TVMTest.rand_list(TVMTest.rand_int(0, 4), 2),
+        dilation=TVMTest.rand_list(TVMTest.rand_int(1, 2), 2),
+        groups=TVMTest.rand_int(4, 8),
+        in_ch_per_group=TVMTest.rand_int(1, 4),
+        out_ch_per_group=TVMTest.rand_int(1, 8)
+    )
+    def test_group_conv(
+        self, shape, kernel_size, stride, padding, dilation, groups, in_ch_per_group, out_ch_per_group
+    ):
+        # NCHW
+        in_channels = in_ch_per_group*groups
+        out_channels = out_ch_per_group*groups
+        X = torch.rand(shape[0], in_channels, shape[1], shape[2])
+        W = torch.rand(out_channels, in_ch_per_group, kernel_size, kernel_size)
+
+        def conv(a, b):
+            return F.conv2d(a + a, b, stride=stride, padding=padding, dilation=dilation, groups=groups)
+
+        ref_out, tvm_out = self.runBoth(conv, X, W)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
+
     @TVMTest.given(shape=TVMTest.rand_shape(rank=2, min_dim=5))
     def test_batch_norm(self, shape):
         a = torch.rand(shape)
