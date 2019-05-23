@@ -40,7 +40,7 @@ RegisterTVMOperator::RegisterTVMOperator(std::vector<TVMOpMap> ops) {
         for (const auto &inp : schema.arguments()) {
           torch_inputs.emplace_back(wrapper_graph.addInput());
         }
-        Node *node =
+        Node* node =
             wrapper_graph.create(op.sym, torch_inputs, schema.returns().size());
         wrapper_graph.appendNode(node);
         wrapper_graph.registerOutput(node->output());
@@ -139,7 +139,7 @@ RegisterTVMOperatorSchedule::RegisterTVMOperatorSchedule(
 
 RegisterTVMOperator reg({
     {Symbol::fromQualString("aten::add"),
-     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("add");
        AT_ASSERT(inputs.size() == 3);
        tvm::Array<tvm::relay::Expr> add_inputs = {inputs[0], inputs[1]};
@@ -152,7 +152,7 @@ RegisterTVMOperator reg({
        return out;
      }},
     {Symbol::fromQualString("aten::add_"),
-     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("add");
        AT_ASSERT(inputs.size() == 3);
        tvm::Array<tvm::relay::Expr> add_inputs = {inputs[0], inputs[1]};
@@ -165,7 +165,7 @@ RegisterTVMOperator reg({
        return out;
      }},
     {Symbol::fromQualString("aten::_convolution"),
-     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        bool is_transpose = relayToConstant<bool>(inputs[6]);
        // check the operator to emit base on is_transpose
        auto op = tvm::relay::Op::Get("nn.conv2d");
@@ -219,7 +219,7 @@ RegisterTVMOperator reg({
        return out;
      }},
     {Symbol::fromQualString("aten::batch_norm"),
-     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) -> tvm::relay::Expr {
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) -> tvm::relay::Expr {
        auto op = tvm::relay::Op::Get("nn.batch_norm");
        AT_CHECK(inputs.size() == 9, "batch_norm received ", inputs.size(), " inputs");
        AT_CHECK(relayToConstant<bool>(inputs[5]) == false, "batch_norm is in training mode");
@@ -275,20 +275,20 @@ RegisterTVMOperator reg({
        return tvm::relay::TupleGetItem(n);
      }},
     {Symbol::fromQualString("aten::relu_"),
-     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("nn.relu");
        auto out = tvm::relay::CallNode::make(op, inputs, tvm::Attrs(), {});
        return out;
      }},
     {Symbol::fromQualString("aten::relu"),
-     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("nn.relu");
        auto out = tvm::relay::CallNode::make(op, inputs, tvm::Attrs(), {});
        return out;
      },
      "relu"},
     {Symbol::fromQualString("aten::threshold_"),
-     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        AT_CHECK(!relayIsNone(inputs[0]));
        AT_CHECK(!relayIsNone(inputs[1]));
        AT_CHECK(!relayIsNone(inputs[2]));
@@ -303,13 +303,13 @@ RegisterTVMOperator reg({
        return out;
      }},
     {Symbol::fromQualString("aten::mul"),
-     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("multiply");
        auto out = tvm::relay::CallNode::make(op, inputs, tvm::Attrs(), {});
        return out;
      }},
     {Symbol::fromQualString("aten::avg_pool2d"),
-     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("nn.avg_pool2d");
        auto pool_attrs = tvm::make_node<tvm::relay::AvgPool2DAttrs>();
        pool_attrs->pool_size = relayToArray<tvm::relay::IndexExpr>(inputs[1]);
@@ -329,7 +329,7 @@ RegisterTVMOperator reg({
        return out;
      }},
     {Symbol::fromQualString("aten::adaptive_avg_pool2d"),
-     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        static const tvm::relay::Op& op = tvm::relay::Op::Get("contrib.adaptive_avg_pool2d");
        auto pool_attrs = tvm::make_node<tvm::relay::AdaptivePool2DAttrs>();
        pool_attrs->output_size = relayToArray<tvm::relay::IndexExpr>(inputs[1]);
@@ -338,7 +338,7 @@ RegisterTVMOperator reg({
        return out;
      }},
     {Symbol::fromQualString("aten::max_pool2d"),
-     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto pool_attrs = tvm::make_node<tvm::relay::MaxPool2DAttrs>();
        pool_attrs->pool_size = relayToArray<tvm::relay::IndexExpr>(inputs[1]);
        auto strides = relayToArray<tvm::relay::IndexExpr>(inputs[2]);
@@ -358,7 +358,7 @@ RegisterTVMOperator reg({
        return out;
      }},
     {Symbol::fromQualString("aten::reshape"),
-     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("reshape");
        auto attrs = tvm::make_node<tvm::relay::ReshapeAttrs>();
        attrs->newshape = relayToArray<tvm::Integer>(inputs[1]);
@@ -370,7 +370,7 @@ RegisterTVMOperator reg({
        return out;
      }},
     {Symbol::fromQualString("aten::linear"),
-     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto dense_attrs = tvm::make_node<tvm::relay::DenseAttrs>();
        auto out = tvm::relay::CallNode::make(tvm::relay::Op::Get("nn.dense"), {inputs[0], inputs[1]}, tvm::Attrs(dense_attrs), {});
 
