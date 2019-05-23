@@ -3,6 +3,22 @@ import torch
 import torch_tvm
 
 class TestCore(TVMTest):
+    def test_get_handle(self):
+        shape = 8
+        x = torch.rand(shape)
+        y = torch.rand(shape)
+        z = torch.rand(shape)
+        def add(a, b, c):
+            return a + b + c
+
+        inputs = [x,y,z]
+
+        torch_tvm.enable()
+        trace_tvm = torch.jit.trace(add, inputs)
+        torch_tvm.disable()
+
+        torch_tvm.push_relay_expr(trace_tvm.graph_for(*inputs))
+
     @TVMTest.given(shape=TVMTest.rand_shape(rank=1))
     def test_core(self, shape):
         x = torch.rand(shape)

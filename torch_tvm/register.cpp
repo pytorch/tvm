@@ -1,3 +1,4 @@
+#include <stack>
 #include <pybind11/pybind11.h>
 #include <torch/csrc/autograd/record_function.h>
 #include <torch/csrc/jit/custom_operator.h>
@@ -21,11 +22,11 @@ static int opt_level = 2;
 static std::string device_type = "cpu";
 static std::string device = "llvm -mcpu=core-avx2";
 static std::string host = "llvm -mcpu=core-avx2";
+static auto tvm_sym = Symbol::fromQualString("tvm::CompilationGroup");
 
+static std::stack<tvm::relay::Expr> relay_expr_stack;
 
 PYBIND11_MODULE(_torch_tvm, m) {
-  auto tvm_sym = Symbol::fromQualString("tvm::CompilationGroup");
-
   // Register the tvm::CompilationGroup operator
   auto options = OperatorOptions().aliasAnalysis(AliasAnalysisKind::PURE);
   RegisterOperators op({Operator(
@@ -43,7 +44,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
 
   // Register the pass that fuses parts of the graph into
   // a tvm::CompilationGroup
-  RegisterPass pass([tvm_sym](std::shared_ptr<Graph>& g) {
+  RegisterPass pass([](std::shared_ptr<Graph>& g) {
     if (fusion_enabled) {
       CustomFuseGraph(g, isSupported, tvm_sym);
     }
@@ -72,5 +73,21 @@ PYBIND11_MODULE(_torch_tvm, m) {
 
   m.def("disable", []() { fusion_enabled = false; });
 
+  m.def("push_relay_expr", [](std::shared_ptr<Graph> g) {
+    std::cerr << *g << "\n";
+    for (auto node : g->nodes()) {
+      if (node->kind() == tvm_sym) {
+        std::vector<Value*> v;
+        TVMContext ctx;
+        auto expr = TVMCompiler::convertToRelay(node->g(attr::Subgraph), ctx);
+        relay_expr_stack.push(expr);
+        break;
+      }
+    }
+  });
+
   m.doc() = "This module does nothing but register a TVM backend.";
 }
+
+//TVM_REGISTER_GLOBAL("torch_tvm._pop_relay_expr") {
+//}
