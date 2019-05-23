@@ -17,9 +17,17 @@ using TVMOpFunctor = std::function<tvm::relay::Expr(
     tvm::Array<tvm::relay::Expr> inputs)>;
 using TVMScheduleFunctor = std::function<const tvm::runtime::PackedFunc*()>;
 
+struct TVMOpMap {
+  TVMOpMap(torch::jit::Symbol sym_, TVMOpFunctor fn_, std::string name_ = "")
+      : sym(sym_), fn(fn_), name(name_) {}
+
+  torch::jit::Symbol sym;
+  TVMOpFunctor fn;
+  std::string name;
+};
+
 struct RegisterTVMOperator {
-  RegisterTVMOperator(
-      std::vector<std::pair<torch::jit::Symbol, TVMOpFunctor>> ops);
+  RegisterTVMOperator(std::vector<TVMOpMap> ops);
 };
 
 struct RegisterTVMOperatorSchedule {

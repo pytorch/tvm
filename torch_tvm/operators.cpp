@@ -1,6 +1,12 @@
 #include "operators.h"
+#include "compiler.h"
 #include <tvm/relay/attrs/nn.h>
 #include <tvm/relay/attrs/transform.h>
+
+#include <torch/csrc/autograd/record_function.h>
+#include <torch/csrc/jit/custom_operator.h>
+#include <torch/csrc/jit/operator_options.h>
+#include <torch/csrc/jit/passes/utils/subgraph_utils.h>
 
 using namespace torch::jit;
 
@@ -14,12 +20,49 @@ std::unordered_map<Symbol, TVMOpFunctor>& getTVMOperatorMap() {
   return map;
 }
 
-RegisterTVMOperator::RegisterTVMOperator(
-    std::vector<std::pair<Symbol, TVMOpFunctor>> ops) {
-  for (const auto& pair : ops) {
-    auto sym = std::get<0>(pair);
-    auto op = std::get<1>(pair);
-    getTVMOperatorMap()[sym] = op;
+// These "wrapper" graphs are used to store the subgraphs
+// that will be compiled during execution.
+static std::list<Graph> wrapper_graphs;
+RegisterTVMOperator::RegisterTVMOperator(std::vector<TVMOpMap> ops) {
+  for (const auto &op : ops) {
+    getTVMOperatorMap()[op.sym] = op.fn;
+
+    if (op.name != "") {
+      auto torch_ops = getAllOperatorsFor(op.sym);
+
+      for (const auto &torch_op : torch_ops) {
+
+        auto schema = torch_op->schema();
+
+        wrapper_graphs.emplace_back();
+        auto &wrapper_graph = wrapper_graphs.back();
+        std::vector<Value *> torch_inputs;
+        for (const auto &inp : schema.arguments()) {
+          torch_inputs.emplace_back(wrapper_graph.addInput());
+        }
+        Node* node =
+            wrapper_graph.create(op.sym, torch_inputs, schema.returns().size());
+        wrapper_graph.appendNode(node);
+        wrapper_graph.registerOutput(node->output());
+
+        Symbol tvm_sym = Symbol::fromQualString("tvm::CompilationGroup");
+        node = SubgraphUtils::createSingletonSubgraph(node, tvm_sym);
+        auto cc = std::make_shared<TVMCompiler>(node);
+
+        // NB: We assume all relay ops are pure
+        auto options = OperatorOptions().aliasAnalysis(AliasAnalysisKind::PURE);
+        auto torch_operator =
+            Operator(FunctionSchema("tvm::" + op.name, "", schema.arguments(),
+                                    schema.returns(), false, false),
+                     [cc](Stack &stack) {
+                       RECORD_FUNCTION("TVM", std::vector<c10::IValue>());
+                       cc->run(stack);
+                       return 0;
+                     },
+                     options);
+        RegisterOperators torch_register_ops({torch_operator});
+      }
+    }
   }
 }
 
@@ -119,7 +162,7 @@ RegisterTVMOperator reg({
        // check the operator to emit base on is_transpose
        auto op = tvm::relay::Op::Get("nn.conv2d");
        if (is_transpose) {
-          op = tvm::relay::Op::Get("nn.conv2d_transpose");
+         op = tvm::relay::Op::Get("nn.conv2d_transpose");
        }
 
        // input and filter
@@ -234,7 +277,8 @@ RegisterTVMOperator reg({
        auto op = tvm::relay::Op::Get("nn.relu");
        auto out = tvm::relay::CallNode::make(op, inputs, tvm::Attrs(), {});
        return out;
-     }},
+     },
+     "relu"},
     {Symbol::fromQualString("aten::threshold_"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        AT_CHECK(!relayIsNone(inputs[0]));

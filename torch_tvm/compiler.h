@@ -12,6 +12,8 @@ struct TVMObject {
   tvm::PackedFunc kernel;
   tvm::PackedFunc set_input;
   tvm::PackedFunc get_output;
+  // Map input indices to values in the subgraph
+  std::vector<torch::jit::Value *> input_values;
 };
 
 struct TVMCompiler {
@@ -33,6 +35,7 @@ struct TVMCompiler {
   std::string device_type_;
   std::string device_;
   std::string host_;
+  tvm::runtime::Module build_mod_;
 
   tvm::relay::Var convertToRelay(torch::jit::Value* val);
   tvm::relay::Expr convertToRelay(const torch::jit::IValue& val);
