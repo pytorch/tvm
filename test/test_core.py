@@ -3,6 +3,31 @@ import torch
 import torch_tvm
 
 class TestCore(TVMTest):
+    def test_get_handle(self):
+        shape = 8
+        x = torch.rand(shape)
+        y = torch.rand(shape)
+        z = torch.rand(shape)
+
+        def add(a, b, c):
+            return a + b + c
+
+        @torch.jit.script
+        def mul(a, b, c):
+            return a * b * c
+
+        inputs = [x,y,z]
+
+        torch_tvm.enable()
+
+        trace_tvm = torch.jit.trace(add, inputs)
+
+        relay_graph = torch_tvm.to_relay(trace_tvm, inputs)
+        relay_graph = torch_tvm.to_relay(add, inputs)
+        relay_graph = torch_tvm.to_relay(mul, inputs)
+
+        torch_tvm.disable()
+
     @TVMTest.given(shape=TVMTest.rand_shape(rank=1))
     def test_registry(self, shape):
         x = torch.rand(shape)

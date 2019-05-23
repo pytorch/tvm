@@ -4,6 +4,7 @@
 #include <torch/csrc/jit/operator_options.h>
 #include <torch/csrc/jit/pass_manager.h>
 #include <torch/csrc/jit/passes/graph_fuser.h>
+#include <torch/csrc/jit/pybind_utils.h>
 
 #include "compiler.h"
 #include "operators.h"
@@ -21,11 +22,12 @@ static int opt_level = 2;
 static std::string device_type = "cpu";
 static std::string device = "llvm -mcpu=core-avx2";
 static std::string host = "llvm -mcpu=core-avx2";
+static auto tvm_sym = Symbol::fromQualString("tvm::CompilationGroup");
 
+static std::unordered_map<size_t, tvm::relay::Expr> relay_exprs;
+static size_t relay_exprs_uuid = 0;
 
 PYBIND11_MODULE(_torch_tvm, m) {
-  auto tvm_sym = Symbol::fromQualString("tvm::CompilationGroup");
-
   // Register the tvm::CompilationGroup operator
   auto options = OperatorOptions().aliasAnalysis(AliasAnalysisKind::PURE);
   RegisterOperators op({Operator(
@@ -43,7 +45,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
 
   // Register the pass that fuses parts of the graph into
   // a tvm::CompilationGroup
-  RegisterPass pass([tvm_sym](std::shared_ptr<Graph>& g) {
+  RegisterPass pass([](std::shared_ptr<Graph>& g) {
     if (fusion_enabled) {
       CustomFuseGraph(g, isSupported, tvm_sym);
     }
@@ -72,5 +74,39 @@ PYBIND11_MODULE(_torch_tvm, m) {
 
   m.def("disable", []() { fusion_enabled = false; });
 
+  m.def("_push_relay_expr", [](std::shared_ptr<Graph> g,
+                              std::vector<at::Tensor> inputs) {
+    size_t count = 0;
+    for (auto node : g->nodes()) {
+      count++;
+    }
+    AT_CHECK(count == 1, "This program cannot be exported as a single Relay expression.");
+    for (auto node : g->nodes()) {
+      if (node->kind() == tvm_sym) {
+        std::vector<Value*> v;
+        auto subgraph = node->g(attr::Subgraph);
+        AT_CHECK(subgraph->inputs().size() == inputs.size(), "Expected ", subgraph->inputs().size(), " inputs");
+        for (auto i = 0; i < inputs.size(); ++i) {
+          subgraph->inputs()[i]->inferTypeFrom(inputs[i]);
+        }
+        TVMContext ctx;
+        ctx.device_type = kDLCPU;
+        ctx.device_id = 0;
+        auto expr = TVMCompiler::convertToRelay(subgraph, ctx);
+        relay_exprs[++relay_exprs_uuid] = expr;
+        return relay_exprs_uuid;
+      } else {
+        AT_CHECK(0, "This program contains non-Relay expressions that cannot be exported.");
+      }
+    }
+  });
+
   m.doc() = "This module does nothing but register a TVM backend.";
 }
+
+TVM_REGISTER_GLOBAL("torch_tvm._pop_relay_expr")
+    .set_body([](tvm::runtime::TVMArgs args, tvm::runtime::TVMRetValue *rv) {
+      size_t id = args[0];
+      *rv = relay_exprs[id]; //.top();
+      relay_exprs.erase(id);
+    });

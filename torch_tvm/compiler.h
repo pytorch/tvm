@@ -37,8 +37,11 @@ struct TVMCompiler {
   std::string host_;
   tvm::runtime::Module build_mod_;
 
-  tvm::relay::Var convertToRelay(torch::jit::Value* val);
-  tvm::relay::Expr convertToRelay(const torch::jit::IValue& val);
-  tvm::relay::Function convertToRelay(
-      std::shared_ptr<torch::jit::Graph> subgraph, std::vector<torch::jit::Value*>* input_values);
+ public:
+  static tvm::relay::Var convertToRelay(torch::jit::Value* val, TVMContext ctx);
+  static tvm::relay::Expr convertToRelay(const torch::jit::IValue& val, TVMContext ctx);
+  static tvm::relay::Function convertToRelay(
+      std::shared_ptr<torch::jit::Graph> subgraph, TVMContext ctx,
+      std::vector<torch::jit::Value*>* input_values = nullptr
+      );
 };

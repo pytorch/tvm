@@ -8,7 +8,7 @@
 
 using namespace torch::jit;
 
-tvm::relay::Var TVMCompiler::convertToRelay(Value* val) {
+tvm::relay::Var TVMCompiler::convertToRelay(Value* val, TVMContext ctx) {
   auto optional_ivalue = toIValue(val);
   if (optional_ivalue.has_value()) {
     val->inferTypeFrom(optional_ivalue.value().toTensor());
@@ -27,11 +27,11 @@ tvm::relay::Var TVMCompiler::convertToRelay(Value* val) {
   AT_ASSERT(0);
 }
 
-tvm::relay::Expr TVMCompiler::convertToRelay(const IValue& val) {
+tvm::relay::Expr TVMCompiler::convertToRelay(const IValue& val, TVMContext ctx) {
   // All doubles are converted to floats
   if (val.isDouble()) {
     auto x = tvm::runtime::NDArray::Empty(
-        {}, tvm::runtime::String2TVMType("float32"), ctx_);
+        {}, tvm::runtime::String2TVMType("float32"), ctx);
     auto d = val.toDouble();
     AT_CHECK(d <= std::numeric_limits<float>::max());
     AT_CHECK(d >= std::numeric_limits<float>::lowest());
@@ -43,7 +43,7 @@ tvm::relay::Expr TVMCompiler::convertToRelay(const IValue& val) {
   // All Ints are converted to int32, which may overflow
   if (val.isInt()) {
     auto x = tvm::runtime::NDArray::Empty(
-        {}, tvm::runtime::String2TVMType("int32"), ctx_);
+        {}, tvm::runtime::String2TVMType("int32"), ctx);
     auto l = val.toInt();
     AT_CHECK(l <= std::numeric_limits<int32_t>::max());
     AT_CHECK(l >= std::numeric_limits<int32_t>::lowest());
@@ -53,7 +53,7 @@ tvm::relay::Expr TVMCompiler::convertToRelay(const IValue& val) {
   }
   if (val.isBool()) {
     auto x = tvm::runtime::NDArray::Empty(
-        {}, tvm::runtime::String2TVMType("bool"), ctx_);
+        {}, tvm::runtime::String2TVMType("bool"), ctx);
     reinterpret_cast<bool*>(x->data)[0] = val.toBool();
     auto v = tvm::relay::ConstantNode::make(x);
     return v;
@@ -62,7 +62,7 @@ tvm::relay::Expr TVMCompiler::convertToRelay(const IValue& val) {
   // HACK sentinel value used for None type
   if (val.isNone()) {
     auto x = tvm::runtime::NDArray::Empty(
-        {}, tvm::runtime::String2TVMType("uint64"), ctx_);
+        {}, tvm::runtime::String2TVMType("uint64"), ctx);
     reinterpret_cast<uint64_t*>(x->data)[0] = getNoneSentinel();
     auto v = tvm::relay::ConstantNode::make(x);
     return v;
@@ -71,7 +71,7 @@ tvm::relay::Expr TVMCompiler::convertToRelay(const IValue& val) {
     tvm::Array<tvm::relay::Expr> tuple_elems;
     for (const auto& elem : val.toIntList()->elements()) {
       auto x = tvm::runtime::NDArray::Empty(
-          {}, tvm::runtime::String2TVMType("int32"), ctx_);
+          {}, tvm::runtime::String2TVMType("int32"), ctx);
       AT_CHECK(elem <= std::numeric_limits<int32_t>::max());
       AT_CHECK(elem >= std::numeric_limits<int32_t>::lowest());
       reinterpret_cast<int32_t*>(x->data)[0] = elem;
@@ -85,15 +85,17 @@ tvm::relay::Expr TVMCompiler::convertToRelay(const IValue& val) {
 }
 
 tvm::relay::Function TVMCompiler::convertToRelay(
-    std::shared_ptr<Graph> subgraph, std::vector<Value*>* input_values) {
+    std::shared_ptr<Graph> subgraph, TVMContext ctx, std::vector<Value*>* input_values) {
   std::unordered_map<Value*, tvm::relay::Expr> value_map;
   tvm::Array<tvm::relay::Var> input_vars;
 
   for (const auto& input : subgraph->inputs()) {
     AT_ASSERT(input->isCompleteTensor());
-    auto v = convertToRelay(input);
+    auto v = convertToRelay(input, ctx);
     input_vars.push_back(v);
-    input_values->emplace_back(input);
+    if (input_values) {
+      input_values->emplace_back(input);
+    }
     value_map[input] = v;
   }
 
@@ -115,12 +117,14 @@ tvm::relay::Function TVMCompiler::convertToRelay(
               break;
             } else {
               if (optional_ivalue.value().isTensor()) {
-                input_values->emplace_back(input);
-                auto input_var = convertToRelay(input);
+                if (input_values) {
+                  input_values->emplace_back(input);
+                }
+                auto input_var = convertToRelay(input, ctx);
                 input_vars.push_back(input_var);
                 value_map[input] = input_var;
               } else {
-                value_map[input] = convertToRelay(optional_ivalue.value());
+                value_map[input] = convertToRelay(optional_ivalue.value(), ctx);
               }
             }
           }
@@ -216,7 +220,7 @@ void TVMCompiler::run(Stack& stack) {
     // or fall back to the JIT interpreter for execution
     tvm::relay::Function tvm_func;
     try {
-      tvm_func = convertToRelay(subgraph_, &cache_[spec].input_values);
+      tvm_func = convertToRelay(subgraph_, ctx_, &cache_[spec].input_values);
     } catch(const std::exception& e) {
       if (strict_) {
         AT_ERROR("Pytorch TVM: fail to convert to relay, exception: ", e.what());
