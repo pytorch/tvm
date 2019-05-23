@@ -45,18 +45,12 @@ RegisterTVMOperator::RegisterTVMOperator(std::vector<TVMOpMap> ops) {
         wrapper_graph.appendNode(node);
         wrapper_graph.registerOutput(node->output());
 
-        std::cerr << op.name << " created as " << wrapper_graph << "\n";
-
         Symbol tvm_sym = Symbol::fromQualString("tvm::CompilationGroup");
         node = SubgraphUtils::createSingletonSubgraph(node, tvm_sym);
-        std::cerr << op.name << " then " << wrapper_graph << "\n";
         auto cc = std::make_shared<TVMCompiler>(node);
-        //, opt_level, strict,
-        // device_type, device, host);
 
         // NB: We assume all relay ops are pure
         auto options = OperatorOptions().aliasAnalysis(AliasAnalysisKind::PURE);
-        std::cerr << "registering tvm::" << op.name << "\n";
         // We don't know the true number of inputs so we make it varargs
         auto torch_operator =
             Operator(FunctionSchema("tvm::" + op.name, "", schema.arguments(),
@@ -68,8 +62,7 @@ RegisterTVMOperator::RegisterTVMOperator(std::vector<TVMOpMap> ops) {
                      },
                      options);
         RegisterOperators torch_register_ops({torch_operator});
-
-      } // for
+      }
     }
   }
 }

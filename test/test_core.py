@@ -5,10 +5,8 @@ import torch_tvm
 class TestCore(TVMTest):
     @TVMTest.given(shape=TVMTest.rand_shape(rank=1))
     def test_registry(self, shape):
-        x = torch.rand(8)
-
+        x = torch.rand(shape)
         y0 = torch.ops.tvm.relu(x)
-        print(x, y0)
         y1 = torch.relu(x)
 
         torch.testing.assert_allclose(y0, y1)

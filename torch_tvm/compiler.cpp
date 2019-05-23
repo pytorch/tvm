@@ -267,10 +267,15 @@ void TVMCompiler::run(Stack& stack) {
   drop(stack, num_inputs);
   int i = 0;
   for (const auto& output : subgraph_->outputs()) {
-    tvm::runtime::NDArray ret_val = cache_[spec].get_output(i++);
+    tvm::runtime::NDArray ret_val = cache_[spec].get_output(i);
     auto dl_tensor = ret_val.ToDLPack();
     auto tensor = at::fromDLPack(dl_tensor);
-    auto var = torch::autograd::make_variable(tensor);
+    auto new_tensor = at::empty_like(tensor);
+    auto new_dl_tensor = at::toDLPack(new_tensor);
+    ret_val = cache_[spec].get_output(i, &new_dl_tensor->dl_tensor);
+    auto var = torch::autograd::make_variable(at::fromDLPack(new_dl_tensor));
     stack.push_back(IValue(var));
+
+    i++;
   }
 }
