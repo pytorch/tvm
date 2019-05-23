@@ -1,6 +1,12 @@
 #include "operators.h"
+#include "compiler.h"
 #include <tvm/relay/attrs/nn.h>
 #include <tvm/relay/attrs/transform.h>
+
+#include <torch/csrc/autograd/record_function.h>
+#include <torch/csrc/jit/custom_operator.h>
+#include <torch/csrc/jit/operator_options.h>
+#include <torch/csrc/jit/passes/utils/subgraph_utils.h>
 
 using namespace torch::jit;
 
@@ -14,12 +20,57 @@ std::unordered_map<Symbol, TVMOpFunctor>& getTVMOperatorMap() {
   return map;
 }
 
-RegisterTVMOperator::RegisterTVMOperator(
-    std::vector<std::pair<Symbol, TVMOpFunctor>> ops) {
-  for (const auto& pair : ops) {
-    auto sym = std::get<0>(pair);
-    auto op = std::get<1>(pair);
-    getTVMOperatorMap()[sym] = op;
+// These "wrapper" graphs are used to store the subgraphs
+// that will be compiled during execution.
+static std::list<Graph> wrapper_graphs;
+RegisterTVMOperator::RegisterTVMOperator(std::vector<TVMOpMap> ops) {
+  for (const auto &op : ops) {
+    getTVMOperatorMap()[op.sym] = op.fn;
+
+    if (op.name != "") {
+      auto torch_ops = getAllOperatorsFor(op.sym);
+
+      for (const auto &torch_op : torch_ops) {
+
+        auto schema = torch_op->schema();
+
+        wrapper_graphs.emplace_back();
+        auto &wrapper_graph = wrapper_graphs.back();
+        std::vector<Value *> torch_inputs;
+        for (const auto &inp : schema.arguments()) {
+          torch_inputs.emplace_back(wrapper_graph.addInput());
+        }
+        Node *node =
+            wrapper_graph.create(op.sym, torch_inputs, schema.returns().size());
+        wrapper_graph.appendNode(node);
+        wrapper_graph.registerOutput(node->output());
+
+        std::cerr << op.name << " created as " << wrapper_graph << "\n";
+
+        Symbol tvm_sym = Symbol::fromQualString("tvm::CompilationGroup");
+        node = SubgraphUtils::createSingletonSubgraph(node, tvm_sym);
+        std::cerr << op.name << " then " << wrapper_graph << "\n";
+        auto cc = std::make_shared<TVMCompiler>(node);
+        //, opt_level, strict,
+        // device_type, device, host);
+
+        // NB: We assume all relay ops are pure
+        auto options = OperatorOptions().aliasAnalysis(AliasAnalysisKind::PURE);
+        std::cerr << "registering tvm::" << op.name << "\n";
+        // We don't know the true number of inputs so we make it varargs
+        auto torch_operator =
+            Operator(FunctionSchema("tvm::" + op.name, "", schema.arguments(),
+                                    schema.returns(), false, false),
+                     [cc](Stack &stack) {
+                       RECORD_FUNCTION("TVM", std::vector<c10::IValue>());
+                       cc->run(stack);
+                       return 0;
+                     },
+                     options);
+        RegisterOperators torch_register_ops({torch_operator});
+
+      } // for
+    }
   }
 }
 
@@ -88,7 +139,7 @@ RegisterTVMOperatorSchedule::RegisterTVMOperatorSchedule(
 
 RegisterTVMOperator reg({
     {Symbol::fromQualString("aten::add"),
-     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("add");
        AT_ASSERT(inputs.size() == 3);
        tvm::Array<tvm::relay::Expr> add_inputs = {inputs[0], inputs[1]};
@@ -101,7 +152,7 @@ RegisterTVMOperator reg({
        return out;
      }},
     {Symbol::fromQualString("aten::add_"),
-     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("add");
        AT_ASSERT(inputs.size() == 3);
        tvm::Array<tvm::relay::Expr> add_inputs = {inputs[0], inputs[1]};
@@ -114,12 +165,12 @@ RegisterTVMOperator reg({
        return out;
      }},
     {Symbol::fromQualString("aten::_convolution"),
-     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
        bool is_transpose = relayToConstant<bool>(inputs[6]);
        // check the operator to emit base on is_transpose
        auto op = tvm::relay::Op::Get("nn.conv2d");
        if (is_transpose) {
-          op = tvm::relay::Op::Get("nn.conv2d_transpose");
+         op = tvm::relay::Op::Get("nn.conv2d_transpose");
        }
 
        // input and filter
@@ -168,7 +219,7 @@ RegisterTVMOperator reg({
        return out;
      }},
     {Symbol::fromQualString("aten::batch_norm"),
-     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) -> tvm::relay::Expr {
+     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) -> tvm::relay::Expr {
        auto op = tvm::relay::Op::Get("nn.batch_norm");
        AT_CHECK(inputs.size() == 9, "batch_norm received ", inputs.size(), " inputs");
        AT_CHECK(relayToConstant<bool>(inputs[5]) == false, "batch_norm is in training mode");
@@ -224,19 +275,20 @@ RegisterTVMOperator reg({
        return tvm::relay::TupleGetItem(n);
      }},
     {Symbol::fromQualString("aten::relu_"),
-     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("nn.relu");
        auto out = tvm::relay::CallNode::make(op, inputs, tvm::Attrs(), {});
        return out;
      }},
     {Symbol::fromQualString("aten::relu"),
-     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("nn.relu");
        auto out = tvm::relay::CallNode::make(op, inputs, tvm::Attrs(), {});
        return out;
-     }},
+     },
+     "relu"},
     {Symbol::fromQualString("aten::threshold_"),
-     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
        AT_CHECK(!relayIsNone(inputs[0]));
        AT_CHECK(!relayIsNone(inputs[1]));
        AT_CHECK(!relayIsNone(inputs[2]));
@@ -251,13 +303,13 @@ RegisterTVMOperator reg({
        return out;
      }},
     {Symbol::fromQualString("aten::mul"),
-     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("multiply");
        auto out = tvm::relay::CallNode::make(op, inputs, tvm::Attrs(), {});
        return out;
      }},
     {Symbol::fromQualString("aten::avg_pool2d"),
-     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("nn.avg_pool2d");
        auto pool_attrs = tvm::make_node<tvm::relay::AvgPool2DAttrs>();
        pool_attrs->pool_size = relayToArray<tvm::relay::IndexExpr>(inputs[1]);
@@ -277,7 +329,7 @@ RegisterTVMOperator reg({
        return out;
      }},
     {Symbol::fromQualString("aten::adaptive_avg_pool2d"),
-     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
        static const tvm::relay::Op& op = tvm::relay::Op::Get("contrib.adaptive_avg_pool2d");
        auto pool_attrs = tvm::make_node<tvm::relay::AdaptivePool2DAttrs>();
        pool_attrs->output_size = relayToArray<tvm::relay::IndexExpr>(inputs[1]);
@@ -286,7 +338,7 @@ RegisterTVMOperator reg({
        return out;
      }},
     {Symbol::fromQualString("aten::max_pool2d"),
-     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
        auto pool_attrs = tvm::make_node<tvm::relay::MaxPool2DAttrs>();
        pool_attrs->pool_size = relayToArray<tvm::relay::IndexExpr>(inputs[1]);
        auto strides = relayToArray<tvm::relay::IndexExpr>(inputs[2]);
@@ -306,7 +358,7 @@ RegisterTVMOperator reg({
        return out;
      }},
     {Symbol::fromQualString("aten::reshape"),
-     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("reshape");
        auto attrs = tvm::make_node<tvm::relay::ReshapeAttrs>();
        attrs->newshape = relayToArray<tvm::Integer>(inputs[1]);
@@ -318,7 +370,7 @@ RegisterTVMOperator reg({
        return out;
      }},
     {Symbol::fromQualString("aten::linear"),
-     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+     [](Node *node, tvm::Array<tvm::relay::Expr> inputs) {
        auto dense_attrs = tvm::make_node<tvm::relay::DenseAttrs>();
        auto out = tvm::relay::CallNode::make(tvm::relay::Op::Get("nn.dense"), {inputs[0], inputs[1]}, tvm::Attrs(dense_attrs), {});
 
