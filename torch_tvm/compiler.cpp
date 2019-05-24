@@ -194,6 +194,9 @@ TVMCompiler::TVMCompiler(
   }
   ctx_.device_id = 0;
   subgraph_ = node->g(attr::Subgraph);
+  auto pfb = tvm::runtime::Registry::Get("relay.build_module._BuildModule");
+  AT_ASSERT(pfb);
+  build_mod_ = (*pfb)();
 }
 
 void TVMCompiler::run(Stack& stack) {
@@ -208,7 +211,6 @@ void TVMCompiler::run(Stack& stack) {
 
   CompleteArgumentSpec spec{false, ArrayRef<IValue>(inputs)};
 
-  std::vector<Value*> input_values_;
   if (cache_.find(spec) == cache_.end()) {
     for (auto& kv : value_to_ivalue) {
       kv.first->inferTypeFrom(kv.second.toTensor());
@@ -227,13 +229,10 @@ void TVMCompiler::run(Stack& stack) {
       InterpreterState(Code(subgraph_)).run(stack);
       return;
     }
-    auto pfb = tvm::runtime::Registry::Get("relay.build_module._BuildModule");
-    AT_ASSERT(pfb);
-    tvm::runtime::Module build_mod = (*pfb)();
-    auto build_f = build_mod.GetFunction("build", false);
-    auto json_f = build_mod.GetFunction("get_graph_json", false);
-    auto mod_f = build_mod.GetFunction("get_module", false);
-    auto set_opt_level_f = build_mod.GetFunction("set_opt_level", false);
+    auto build_f = build_mod_.GetFunction("build", false);
+    auto json_f = build_mod_.GetFunction("get_graph_json", false);
+    auto mod_f = build_mod_.GetFunction("get_module", false);
+    auto set_opt_level_f = build_mod_.GetFunction("set_opt_level", false);
     set_opt_level_f(opt_level_);
     tvm::Array<HalideIR::Expr> target_pair;
     target_pair.push_back(tvm::ir::StringImm::make(device_type_));
@@ -253,14 +252,14 @@ void TVMCompiler::run(Stack& stack) {
     AT_CHECK(subgraph_->outputs().size() == n, "Compiled subgraph with mismatching num outputs");
   }
 
-  for (auto i = 0; i < input_values_.size(); ++i) {
-    auto* value = input_values_[i];
+  for (auto i = 0; i < cache_[spec].input_values.size(); ++i) {
+    auto *value = cache_[spec].input_values[i];
     if (!value_to_ivalue.count(value)) {
       auto optional_ivalue = toIValue(value);
       AT_ASSERT(optional_ivalue.has_value());
       value_to_ivalue[value] = optional_ivalue.value();
     }
-    auto ivalue = value_to_ivalue.at(input_values_[i]);
+    auto ivalue = value_to_ivalue.at(cache_[spec].input_values[i]);
     auto tensor = ivalue.toTensor().to(at::kFloat);
     auto dl_tensor = at::toDLPack(tensor);
     cache_[spec].set_input(i, tvm::runtime::NDArray::FromDLPack(dl_tensor));
@@ -272,10 +271,11 @@ void TVMCompiler::run(Stack& stack) {
   drop(stack, num_inputs);
   int i = 0;
   for (const auto& output : subgraph_->outputs()) {
-    tvm::runtime::NDArray ret_val = cache_[spec].get_output(i++);
+    tvm::runtime::NDArray ret_val = cache_[spec].get_output(i);
     auto dl_tensor = ret_val.ToDLPack();
     auto tensor = at::fromDLPack(dl_tensor);
     auto var = torch::autograd::make_variable(tensor);
     stack.push_back(IValue(var));
+    i++;
   }
 }

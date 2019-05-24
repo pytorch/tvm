@@ -1,10 +1,11 @@
-#include <stack>
 #include <pybind11/pybind11.h>
+#include <stack>
 #include <torch/csrc/autograd/record_function.h>
 #include <torch/csrc/jit/custom_operator.h>
 #include <torch/csrc/jit/operator_options.h>
 #include <torch/csrc/jit/pass_manager.h>
 #include <torch/csrc/jit/passes/graph_fuser.h>
+#include <torch/csrc/jit/pybind_utils.h>
 
 #include "compiler.h"
 #include "operators.h"
@@ -24,7 +25,8 @@ static std::string device = "llvm -mcpu=core-avx2";
 static std::string host = "llvm -mcpu=core-avx2";
 static auto tvm_sym = Symbol::fromQualString("tvm::CompilationGroup");
 
-static std::stack<tvm::relay::Expr> relay_expr_stack;
+static std::unordered_map<size_t, tvm::relay::Expr> relay_exprs;
+static size_t relay_exprs_uuid = 1337;
 
 PYBIND11_MODULE(_torch_tvm, m) {
   // Register the tvm::CompilationGroup operator
@@ -73,15 +75,23 @@ PYBIND11_MODULE(_torch_tvm, m) {
 
   m.def("disable", []() { fusion_enabled = false; });
 
-  m.def("push_relay_expr", [](std::shared_ptr<Graph> g) {
+  m.def("push_relay_expr", [](std::shared_ptr<Graph> g,
+                              std::vector<at::Tensor> inputs) {
     std::cerr << *g << "\n";
     for (auto node : g->nodes()) {
       if (node->kind() == tvm_sym) {
         std::vector<Value*> v;
+        auto subgraph = node->g(attr::Subgraph);
+        AT_CHECK(subgraph->inputs().size() == inputs.size(), "Expected ", subgraph->inputs().size(), " inputs");
+        for (auto i = 0; i < inputs.size(); ++i) {
+          subgraph->inputs()[i]->inferTypeFrom(inputs[i]);
+        }
         TVMContext ctx;
-        auto expr = TVMCompiler::convertToRelay(node->g(attr::Subgraph), ctx);
-        relay_expr_stack.push(expr);
-        break;
+        ctx.device_type = kDLCPU;
+        ctx.device_id = 0;
+        auto expr = TVMCompiler::convertToRelay(subgraph, ctx);
+        relay_exprs[++relay_exprs_uuid] = expr;
+        return relay_exprs_uuid;
       }
     }
   });
@@ -89,5 +99,9 @@ PYBIND11_MODULE(_torch_tvm, m) {
   m.doc() = "This module does nothing but register a TVM backend.";
 }
 
-//TVM_REGISTER_GLOBAL("torch_tvm._pop_relay_expr") {
-//}
+TVM_REGISTER_GLOBAL("torch_tvm.pop_relay_expr")
+    .set_body([](tvm::runtime::TVMArgs args, tvm::runtime::TVMRetValue *rv) {
+      size_t id = args[0];
+      *rv = relay_exprs[id]; //.top();
+      relay_exprs.erase(id);
+    });

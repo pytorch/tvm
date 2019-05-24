@@ -8,8 +8,13 @@ class TestCore(TVMTest):
         x = torch.rand(shape)
         y = torch.rand(shape)
         z = torch.rand(shape)
+
         def add(a, b, c):
             return a + b + c
+
+        @torch.jit.script
+        def mul(a, b, c):
+            return a * b * c
 
         inputs = [x,y,z]
 
@@ -17,7 +22,19 @@ class TestCore(TVMTest):
         trace_tvm = torch.jit.trace(add, inputs)
         torch_tvm.disable()
 
-        torch_tvm.push_relay_expr(trace_tvm.graph_for(*inputs))
+        relay_graph = torch_tvm.to_relay(add, inputs)
+        print(relay_graph)
+
+        relay_graph = torch_tvm.to_relay(mul, inputs)
+        print(relay_graph)
+
+    @TVMTest.given(shape=TVMTest.rand_shape(rank=1))
+    def test_registry(self, shape):
+        x = torch.rand(shape)
+        y0 = torch.ops.tvm.relu(x)
+        y1 = torch.relu(x)
+
+        torch.testing.assert_allclose(y0, y1)
 
     @TVMTest.given(shape=TVMTest.rand_shape(rank=1))
     def test_core(self, shape):
