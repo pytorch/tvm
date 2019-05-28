@@ -1,5 +1,4 @@
 #include <pybind11/pybind11.h>
-#include <stack>
 #include <torch/csrc/autograd/record_function.h>
 #include <torch/csrc/jit/custom_operator.h>
 #include <torch/csrc/jit/operator_options.h>
@@ -26,7 +25,7 @@ static std::string host = "llvm -mcpu=core-avx2";
 static auto tvm_sym = Symbol::fromQualString("tvm::CompilationGroup");
 
 static std::unordered_map<size_t, tvm::relay::Expr> relay_exprs;
-static size_t relay_exprs_uuid = 1337;
+static size_t relay_exprs_uuid = 0;
 
 PYBIND11_MODULE(_torch_tvm, m) {
   // Register the tvm::CompilationGroup operator
@@ -75,9 +74,13 @@ PYBIND11_MODULE(_torch_tvm, m) {
 
   m.def("disable", []() { fusion_enabled = false; });
 
-  m.def("push_relay_expr", [](std::shared_ptr<Graph> g,
+  m.def("_push_relay_expr", [](std::shared_ptr<Graph> g,
                               std::vector<at::Tensor> inputs) {
-    std::cerr << *g << "\n";
+    size_t count = 0;
+    for (auto node : g->nodes()) {
+      count++;
+    }
+    AT_CHECK(count == 1, "This program cannot be exported as a single Relay expression.");
     for (auto node : g->nodes()) {
       if (node->kind() == tvm_sym) {
         std::vector<Value*> v;
@@ -92,6 +95,8 @@ PYBIND11_MODULE(_torch_tvm, m) {
         auto expr = TVMCompiler::convertToRelay(subgraph, ctx);
         relay_exprs[++relay_exprs_uuid] = expr;
         return relay_exprs_uuid;
+      } else {
+        AT_CHECK(0, "This program contains non-Relay expressions that cannot be exported.");
       }
     }
   });
@@ -99,7 +104,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
   m.doc() = "This module does nothing but register a TVM backend.";
 }
 
-TVM_REGISTER_GLOBAL("torch_tvm.pop_relay_expr")
+TVM_REGISTER_GLOBAL("torch_tvm._pop_relay_expr")
     .set_body([](tvm::runtime::TVMArgs args, tvm::runtime::TVMRetValue *rv) {
       size_t id = args[0];
       *rv = relay_exprs[id]; //.top();
