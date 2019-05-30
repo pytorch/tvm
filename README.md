@@ -2,8 +2,6 @@
 [![CircleCI](https://circleci.com/gh/pytorch/tvm.svg?style=svg)](https://circleci.com/gh/pytorch/tvm)
 <img align="right" width="400" src="http://ec2-3-14-143-1.us-east-2.compute.amazonaws.com/benchmarks.png?">
 
-Please note that this is a work in progress.
-
 
 ## Build
 
