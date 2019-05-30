@@ -51,7 +51,6 @@ RegisterTVMOperator::RegisterTVMOperator(std::vector<TVMOpMap> ops) {
 
         // NB: We assume all relay ops are pure
         auto options = OperatorOptions().aliasAnalysis(AliasAnalysisKind::PURE);
-        // We don't know the true number of inputs so we make it varargs
         auto torch_operator =
             Operator(FunctionSchema("tvm::" + op.name, "", schema.arguments(),
                                     schema.returns(), false, false),
