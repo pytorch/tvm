@@ -2,8 +2,6 @@
 [![CircleCI](https://circleci.com/gh/pytorch/tvm.svg?style=svg)](https://circleci.com/gh/pytorch/tvm)
 <img align="right" width="400" src="http://ec2-3-14-143-1.us-east-2.compute.amazonaws.com/benchmarks.png?">
 
-Please note that this is a work in progress.
-
 
 ## Build
 
@@ -87,6 +85,29 @@ RegisterTVMOperator reg_relu({
 });
 ```
 
+### How do I extract the Relay expression associated with a PyTorch Graph?
+
+If the PyTorch function can be fully converted to Relay, it is possible to extract the expression itself
+using `torch_tvm.to_relay(func, inputs)`.  Example inputs must be passed in to calculate type information.
+
+```
+def add(a, b, c):
+    return a + b + c
+
+# via tracing
+relay_graph = torch_tvm.to_relay(add, inputs)
+
+@torch.jit.script
+def mul(a, b, c):
+    return a * b * c
+
+# via script
+relay_graph = torch_tvm.to_relay(mul, inputs)
+```
+
+Note that not all functions can be converted to Relay in their entirety and will raise exceptions
+if expression extraction is attempted.  To solve this isse, simply refactor the function.
+
 ## v0.1 Roadmap
 
 Below, in order, is a prioritized list of tasks for this repository.
@@ -113,6 +134,8 @@ Below, in order, is a prioritized list of tasks for this repository.
   - Enable Python/C++ mechanism to use custom TVM operators and schedules
 - [x] Bail-out mechanism
   - When TVM cannot compile a subgraph, invoke PyTorch JIT fallback
+- [x] Extract Relay expression
+- [x] Enable exposure of ops registered in eager mode under `torch.ops.tvm.*`
   
 ### v0.2 Plan
 
