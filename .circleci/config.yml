@@ -34,11 +34,6 @@ jobs:
 
             python setup.py install --cmake
             mkdir -p tvm/build/
-            cp -r build/tvm/* tvm/build/
-            cd tvm/python && python setup.py install
-            cd ../..
-            cd tvm/topi/python && python setup.py install
-            cd ../../..
 
             OMP_NUM_THREADS=1 python setup.py test 
 
