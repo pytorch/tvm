@@ -50,17 +50,21 @@ RegisterTVMOperator::RegisterTVMOperator(std::vector<TVMOpMap> ops) {
         auto cc = std::make_shared<TVMCompiler>(node);
 
         // NB: We assume all relay ops are pure
-        auto options = OperatorOptions().aliasAnalysis(AliasAnalysisKind::PURE);
+        auto options = c10::OperatorOptions();
+        options.setAliasAnalysis(AliasAnalysisKind::PURE);
         auto torch_operator =
             Operator(FunctionSchema("tvm::" + op.name, "", schema.arguments(),
                                     schema.returns(), false, false),
-                     [cc](Stack &stack) {
-                       RECORD_FUNCTION("TVM", std::vector<c10::IValue>());
-                       cc->run(stack);
-                       return 0;
+                     [cc](const Node *node) {
+                       return [cc](Stack &stack) {
+                         RECORD_FUNCTION("TVM", std::vector<c10::IValue>());
+                         cc->run(stack);
+                         return 0;
+                       };
                      },
                      options);
-        RegisterOperators torch_register_ops({torch_operator});
+        RegisterOperators torch_register_ops(
+            std::vector<Operator>{torch_operator});
       }
     }
   }

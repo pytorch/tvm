@@ -162,6 +162,24 @@ class cmake_build(setuptools.Command):
                 '--', '-j', str(multiprocessing.cpu_count()),
             ]
             subprocess.check_call(build_args)
+            mk_tvm_dir = [
+                'mkdir',
+                '-p',
+                '{}'.format(os.path.join(TOP_DIR, 'tvm', 'build')),
+            ]
+            subprocess.check_call(mk_tvm_dir)
+            copy_tvm_files = [
+                'cp',
+                '-r',
+                '{}'.format(os.path.join(TOP_DIR, 'build', 'tvm')),
+                '{}'.format(os.path.join(TOP_DIR, 'tvm', 'build')),
+            ]
+            subprocess.check_call(copy_tvm_files)
+        with cd(os.path.join(TOP_DIR, 'tvm', 'python')):
+            subprocess.check_call([sys.executable, 'setup.py', 'install'])
+        with cd(os.path.join(TOP_DIR, 'tvm', 'topi', 'python')):
+            subprocess.check_call([sys.executable, 'setup.py', 'install'])
+          
 
     def run(self):
         is_initial_build = not os.path.exists(CMAKE_BUILD_DIR)
