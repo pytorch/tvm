@@ -244,7 +244,7 @@ void TVMCompiler::run(Stack& stack) {
     AT_ASSERT(pfr);
     tvm::runtime::Module run_mod =
         (*pfr)(json, mod, (int)ctx_.device_type, (int)ctx_.device_id);
-    cache_[spec].set_input = run_mod.GetFunction("set_input", false);
+    cache_[spec].set_input = run_mod.GetFunction("set_input_zero_copy", false);
     cache_[spec].kernel = run_mod.GetFunction("run", false);
     cache_[spec].get_output = run_mod.GetFunction("get_output", false);
     auto get_num_outputs = run_mod.GetFunction("get_num_outputs", false);
