@@ -9,6 +9,7 @@ import setuptools
 import setuptools.command.build_py
 import setuptools.command.develop
 import setuptools.command.build_ext
+import setuptools.command.install
 
 from collections import namedtuple
 from contextlib import contextmanager
@@ -162,6 +163,7 @@ class cmake_build(setuptools.Command):
                 '--', '-j', str(multiprocessing.cpu_count()),
             ]
             subprocess.check_call(build_args)
+          
 
     def run(self):
         is_initial_build = not os.path.exists(CMAKE_BUILD_DIR)
@@ -194,12 +196,33 @@ class build_ext(setuptools.command.build_ext.build_ext):
                 os.makedirs(os.path.dirname(dst))
             self.copy_file(src, dst)
 
+class install(setuptools.command.install.install):
+    def run(self):
+        setuptools.command.install.install.run(self)
+        mk_tvm_dir = [
+            'mkdir',
+            '-p',
+            '{}'.format(os.path.join(TOP_DIR, 'tvm', 'build')),
+        ]
+        subprocess.check_call(mk_tvm_dir)
+        copy_tvm_files = [
+            'cp',
+            '-a',
+            '{}'.format(os.path.join(CMAKE_BUILD_DIR, 'tvm', '.')),
+            '{}'.format(os.path.join(TOP_DIR, 'tvm', 'build')),
+        ]
+        subprocess.check_call(copy_tvm_files)
+        with cd(os.path.join(TOP_DIR, 'tvm', 'python')):
+            subprocess.check_call("{} setup.py install".format(sys.executable), shell=True)
+        with cd(os.path.join(TOP_DIR, 'tvm', 'topi', 'python')):
+            subprocess.check_call("{} setup.py install".format(sys.executable), shell=True)
 
 cmdclass = {
     'cmake_build': cmake_build,
     'build_py': build_py,
     'develop': develop,
     'build_ext': build_ext,
+    'install': install,
 }
 
 ################################################################################
