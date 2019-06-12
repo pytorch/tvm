@@ -100,6 +100,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
         AT_CHECK(0, "This program contains non-Relay expressions that cannot be exported.");
       }
     }
+    return 0UL;
   });
 
   m.doc() = "This module does nothing but register a TVM backend.";
