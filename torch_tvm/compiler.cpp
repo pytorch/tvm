@@ -69,7 +69,7 @@ tvm::relay::Expr TVMCompiler::convertToRelay(const IValue& val, TVMContext ctx) 
   }
   if (val.isIntList()) {
     tvm::Array<tvm::relay::Expr> tuple_elems;
-    for (const auto& elem : val.toIntList()->elements()) {
+    for (const auto& elem : val.toIntList()) {
       auto x = tvm::runtime::NDArray::Empty(
           {}, tvm::runtime::String2TVMType("int32"), ctx);
       AT_CHECK(elem <= std::numeric_limits<int32_t>::max());
