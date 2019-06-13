@@ -2,6 +2,7 @@ import time
 import numpy
 from numbers import Number
 import unittest
+import os
 
 import torch
 from torch.autograd.profiler import profile
@@ -70,7 +71,10 @@ class TVMTest(unittest.TestCase):
 
           # jit the function and lower to TVM
           torch_tvm.enable()
-          with autotvm.apply_history_best("test/autotvm_tuning.log"):
+          d = os.path.dirname(os.path.abspath(__file__))
+          fn = os.path.join(d, "autotvm_tuning.log")
+
+          with autotvm.apply_history_best(fn):
             trace_tvm = torch.jit.trace(func, inputs)
             try:
               tvm_out = trace_tvm(*inputs)
