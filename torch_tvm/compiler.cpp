@@ -232,12 +232,8 @@ void TVMCompiler::run(Stack& stack) {
     auto build_f = build_mod_.GetFunction("build", false);
     auto json_f = build_mod_.GetFunction("get_graph_json", false);
     auto mod_f = build_mod_.GetFunction("get_module", false);
-    auto set_opt_level_f = build_mod_.GetFunction("set_opt_level", false);
-    set_opt_level_f(opt_level_);
-    tvm::Array<HalideIR::Expr> target_pair;
-    target_pair.push_back(tvm::ir::StringImm::make(device_type_));
-    target_pair.push_back(tvm::ir::StringImm::make(device_));
-    build_f(tvm_func, target_pair, host_);
+    tvm::Map<tvm::Integer, tvm::Target> target_map = {{ctx_.device_type, tvm::Target::Create(device_)}};
+    build_f(tvm_func, target_map, tvm::Target::Create(host_));
     std::string json = json_f();
     tvm::runtime::Module mod = mod_f();
     auto pfr = tvm::runtime::Registry::Get("tvm.graph_runtime.create");
