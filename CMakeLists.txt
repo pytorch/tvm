@@ -26,7 +26,7 @@ add_subdirectory(${TVM_DIR})
 
 pybind11_add_module(_torch_tvm SHARED ${TORCH_TVM_SRCS})
 target_link_libraries(_torch_tvm PUBLIC
-  torch caffe2 c10 pybind11 tvm tvm_topi)
+  torch pybind11 tvm tvm_topi)
 
 target_include_directories(_torch_tvm PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
