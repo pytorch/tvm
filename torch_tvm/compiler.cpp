@@ -21,7 +21,7 @@ tvm::relay::Var TVMCompiler::convertToRelay(Value* val, TVMContext ctx) {
     }
     // TODO: support non-float tensors
     auto t = tvm::relay::TensorTypeNode::make(sizes, ::tvm::Float(32));
-    auto v = tvm::relay::VarNode::make(val->uniqueName(), t);
+    auto v = tvm::relay::VarNode::make(val->debugName() + std::to_string(reinterpret_cast<std::uintptr_t>(val)), t);
     return v;
   }
   AT_ASSERT(0);
