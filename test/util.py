@@ -13,6 +13,8 @@ import torch_tvm
 from tvm import autotvm
 
 # base TVMTest class
+
+
 class TVMTest(unittest.TestCase):
     precision = 1e-5
 
@@ -62,36 +64,35 @@ class TVMTest(unittest.TestCase):
 
         return f
 
-
     def runBoth(self, func, *inputs, check_tvm=True):
         with torch.no_grad():
-          # jit the function
-          trace_jit = torch.jit.trace(func, inputs)
-          ref_out = trace_jit(*inputs)
+            # jit the function
+            trace_jit = torch.jit.trace(func, inputs)
+            ref_out = trace_jit(*inputs)
 
-          # jit the function and lower to TVM
-          torch_tvm.enable()
-          d = os.path.dirname(os.path.abspath(__file__))
-          fn = os.path.join(d, "autotvm_tuning.log")
+            # jit the function and lower to TVM
+            torch_tvm.enable()
+            d = os.path.dirname(os.path.abspath(__file__))
+            fn = os.path.join(d, "autotvm_tuning.log")
 
-          with autotvm.apply_history_best(fn):
-            trace_tvm = torch.jit.trace(func, inputs)
-            try:
-              tvm_out = trace_tvm(*inputs)
-            except Exception as e:
-              print("Error with graph\n{}".format(trace_tvm.graph))
-              raise e
+            with autotvm.apply_history_best(fn):
+                trace_tvm = torch.jit.trace(func, inputs)
+                try:
+                    tvm_out = trace_tvm(*inputs)
+                except Exception as e:
+                    print("Error with graph\n{}".format(trace_tvm.graph))
+                    raise e
 
-          if check_tvm == True:
-              tvm_unused = "TVM was not able to optimize this trace."
-              assert "tvm::CompilationGroup" in str(
-                  trace_tvm.graph_for(*inputs)
-              ), tvm_unused + " Graph:\n" + str(trace_tvm.graph_for(*inputs))
-              # tvm compile the graph and ensure TVM is used
-              with profile() as p:
-                  _ = trace_tvm(*inputs)
-              assert "TVM" in [_.name for _ in p.function_events], tvm_unused
+            if check_tvm == True:
+                tvm_unused = "TVM was not able to optimize this trace."
+                assert "tvm::CompilationGroup" in str(
+                    trace_tvm.graph_for(*inputs)
+                ), tvm_unused + " Graph:\n" + str(trace_tvm.graph_for(*inputs))
+                # tvm compile the graph and ensure TVM is used
+                with profile() as p:
+                    _ = trace_tvm(*inputs)
+                assert "TVM" in [_.name for _ in p.function_events], tvm_unused
 
-          torch_tvm.disable()
+            torch_tvm.disable()
 
-          return ref_out, tvm_out
+            return ref_out, tvm_out

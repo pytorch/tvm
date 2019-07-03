@@ -2,6 +2,12 @@
 ## Source: https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py ##
 ########################################################################################
 
+from skimage import io, transform
+import torch_tvm
+import torch.nn.functional as F
+import torch
+from test.util import TVMTest
+import unittest
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
 
@@ -62,7 +68,8 @@ class BasicBlock(nn.Module):
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         if groups != 1 or base_width != 64:
-            raise ValueError("BasicBlock only supports groups=1 and base_width=64")
+            raise ValueError(
+                "BasicBlock only supports groups=1 and base_width=64")
         # Both self.conv1 and self.downsample layers downsample the input when stride != 1
         self.conv1 = conv3x3(inplanes, planes, stride)
         self.bn1 = norm_layer(planes)
@@ -166,7 +173,8 @@ class ResNet(nn.Module):
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.layer1 = self._make_layer(block, 64, layers[0], norm_layer=norm_layer)
+        self.layer1 = self._make_layer(
+            block, 64, layers[0], norm_layer=norm_layer)
         self.layer2 = self._make_layer(
             block, 128, layers[1], stride=2, norm_layer=norm_layer
         )
@@ -181,7 +189,8 @@ class ResNet(nn.Module):
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+                nn.init.kaiming_normal_(
+                    m.weight, mode="fan_out", nonlinearity="relu")
             elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
@@ -244,7 +253,7 @@ class ResNet(nn.Module):
         x = self.layer4(x)
 
         x = self.avgpool(x)
-        x = torch.reshape(x, (1,-1))
+        x = torch.reshape(x, (1, -1))
         x = self.fc(x)
 
         return x
@@ -311,36 +320,31 @@ def resnet152(pretrained=False, **kwargs):
 
 
 def resnext50_32x4d(pretrained=False, **kwargs):
-    model = ResNet(Bottleneck, [3, 4, 6, 3], groups=32, width_per_group=4, **kwargs)
+    model = ResNet(Bottleneck, [3, 4, 6, 3],
+                   groups=32, width_per_group=4, **kwargs)
     # if pretrained:
     #     model.load_state_dict(model_zoo.load_url(model_urls['resnext50_32x4d']))
     return model
 
 
 def resnext101_32x8d(pretrained=False, **kwargs):
-    model = ResNet(Bottleneck, [3, 4, 23, 3], groups=32, width_per_group=8, **kwargs)
+    model = ResNet(Bottleneck, [3, 4, 23, 3],
+                   groups=32, width_per_group=8, **kwargs)
     # if pretrained:
     #     model.load_state_dict(model_zoo.load_url(model_urls['resnext101_32x8d']))
     return model
 
 
 # TVM Tests here:
-import unittest
-from test.util import TVMTest
-
-import torch
-import torch.nn.functional as F
-import torch_tvm
-from skimage import io, transform
 
 
 class resnetish(nn.Module):
     def __init__(self):
         super(resnetish, self).__init__()
         block = BasicBlock
-        layers = [2,2,2,2]
-        self.groups=1
-        width_per_group=64
+        layers = [2, 2, 2, 2]
+        self.groups = 1
+        width_per_group = 64
         self.base_width = width_per_group
         self.inplanes = 64
         self.conv1 = nn.Conv2d(
@@ -350,7 +354,8 @@ class resnetish(nn.Module):
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.layer1 = self._make_layer(block, 64, layers[0], norm_layer=norm_layer)
+        self.layer1 = self._make_layer(
+            block, 64, layers[0], norm_layer=norm_layer)
         self.layer2 = self._make_layer(
             block, 128, layers[1], stride=2, norm_layer=norm_layer
         )
@@ -408,37 +413,45 @@ class resnetish(nn.Module):
 
         return x
 
+
 class TestModels(TVMTest):
     def model_test(self, constructor):
         model = constructor(True)
         model.eval()
-        image = io.imread('test/cat.png')[:,:,:3].transpose(2,0,1)
+        image = io.imread('test/cat.png')[:, :, :3].transpose(2, 0, 1)
         input_image = torch.unsqueeze(torch.Tensor(image), 0)
         ref_out, tvm_out = self.runBoth(model, input_image)
         # With CNN model tests we look for top-k similarity rather than
         # exact numerical matches post-softmax.
         k = 10
-        torch.testing.assert_allclose(ref_out.topk(k).indices, tvm_out.topk(k).indices)
+        torch.testing.assert_allclose(
+            ref_out.topk(k).indices, tvm_out.topk(k).indices)
 
     def test_resnet18(self):
         self.model_test(resnet18)
+
     def test_resnet34(self):
         self.model_test(resnet34)
+
     def test_resnet50(self):
         self.model_test(resnet50)
+
     def test_resnet101(self):
         self.model_test(resnet101)
+
     def test_resnet152(self):
         self.model_test(resnet152)
+
     def test_resnext50_32x4d(self):
         self.model_test(resnext50_32x4d)
+
     def test_resnext101_32x8d(self):
         self.model_test(resnext101_32x8d)
 
     def test_resnetish(self):
         model = resnetish()
         model.eval()
-        image = io.imread('test/cat.png')[:,:,:3].transpose(2,0,1)
+        image = io.imread('test/cat.png')[:, :, :3].transpose(2, 0, 1)
         input_image = torch.unsqueeze(torch.Tensor(image), 0)
         ref_out, tvm_out = self.runBoth(model, input_image)
         torch.testing.assert_allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)

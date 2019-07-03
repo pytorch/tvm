@@ -1,7 +1,7 @@
 #include "operators.h"
-#include "compiler.h"
 #include <tvm/relay/attrs/nn.h>
 #include <tvm/relay/attrs/transform.h>
+#include "compiler.h"
 
 #include <torch/csrc/autograd/record_function.h>
 #include <torch/csrc/jit/custom_operator.h>
@@ -24,20 +24,19 @@ std::unordered_map<Symbol, TVMOpFunctor>& getTVMOperatorMap() {
 // that will be compiled during execution.
 static std::list<Graph> wrapper_graphs;
 RegisterTVMOperator::RegisterTVMOperator(std::vector<TVMOpMap> ops) {
-  for (const auto &op : ops) {
+  for (const auto& op : ops) {
     getTVMOperatorMap()[op.sym] = op.fn;
 
     if (op.name != "") {
       auto torch_ops = getAllOperatorsFor(op.sym);
 
-      for (const auto &torch_op : torch_ops) {
-
+      for (const auto& torch_op : torch_ops) {
         auto schema = torch_op->schema();
 
         wrapper_graphs.emplace_back();
-        auto &wrapper_graph = wrapper_graphs.back();
-        std::vector<Value *> torch_inputs;
-        for (const auto &inp : schema.arguments()) {
+        auto& wrapper_graph = wrapper_graphs.back();
+        std::vector<Value*> torch_inputs;
+        for (const auto& inp : schema.arguments()) {
           torch_inputs.emplace_back(wrapper_graph.addInput());
         }
         Node* node =
@@ -52,17 +51,22 @@ RegisterTVMOperator::RegisterTVMOperator(std::vector<TVMOpMap> ops) {
         // NB: We assume all relay ops are pure
         auto options = c10::OperatorOptions();
         options.setAliasAnalysis(AliasAnalysisKind::PURE);
-        auto torch_operator =
-            Operator(FunctionSchema("tvm::" + op.name, "", schema.arguments(),
-                                    schema.returns(), false, false),
-                     [cc](const Node *node) {
-                       return [cc](Stack &stack) {
-                         RECORD_FUNCTION("TVM", std::vector<c10::IValue>());
-                         cc->run(stack);
-                         return 0;
-                       };
-                     },
-                     options);
+        auto torch_operator = Operator(
+            FunctionSchema(
+                "tvm::" + op.name,
+                "",
+                schema.arguments(),
+                schema.returns(),
+                false,
+                false),
+            [cc](const Node* node) {
+              return [cc](Stack& stack) {
+                RECORD_FUNCTION("TVM", std::vector<c10::IValue>());
+                cc->run(stack);
+                return 0;
+              };
+            },
+            options);
         RegisterOperators torch_register_ops(
             std::vector<Operator>{torch_operator});
       }
@@ -117,7 +121,7 @@ template <typename T>
 tvm::Array<T> relayToArray(tvm::relay::Expr e) {
   auto t = e.as<tvm::relay::TupleNode>();
   tvm::Array<T> elems;
-  for (auto c: t->fields) {
+  for (auto c : t->fields) {
     int elem = relayToConstant<int>(c);
     elems.push_back(elem);
   }
@@ -180,17 +184,16 @@ RegisterTVMOperator reg({
        conv_attrs->data_layout = "NCHW";
        conv_attrs->kernel_layout = "OIHW";
 
-       conv_attrs->kernel_size = tvm::NullValue<tvm::Array<tvm::relay::IndexExpr>>();
-       // If the input was a complete tensor type than we have information to populate the
-       // kernel
-       if (const tvm::relay::VarNode* var = inputs[1].as<tvm::relay::VarNode>()) {
+       conv_attrs->kernel_size =
+           tvm::NullValue<tvm::Array<tvm::relay::IndexExpr>>();
+       // If the input was a complete tensor type than we have information to
+       // populate the kernel
+       if (const tvm::relay::VarNode* var =
+               inputs[1].as<tvm::relay::VarNode>()) {
          auto* w_t = var->type_annotation.as<tvm::relay::TensorTypeNode>();
          AT_ASSERT(w_t);
          auto shape = w_t->shape;
-         tvm::Array<tvm::relay::IndexExpr> w_sizes = {
-               shape[2],
-               shape[3]
-         };
+         tvm::Array<tvm::relay::IndexExpr> w_sizes = {shape[2], shape[3]};
          conv_attrs->kernel_size = w_sizes;
        }
 
@@ -217,8 +220,14 @@ RegisterTVMOperator reg({
     {Symbol::fromQualString("aten::batch_norm"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) -> tvm::relay::Expr {
        auto op = tvm::relay::Op::Get("nn.batch_norm");
-       AT_CHECK(inputs.size() == 9, "batch_norm received ", inputs.size(), " inputs");
-       AT_CHECK(relayToConstant<bool>(inputs[5]) == false, "batch_norm is in training mode");
+       AT_CHECK(
+           inputs.size() == 9,
+           "batch_norm received ",
+           inputs.size(),
+           " inputs");
+       AT_CHECK(
+           relayToConstant<bool>(inputs[5]) == false,
+           "batch_norm is in training mode");
        auto attrs = tvm::make_node<tvm::relay::BatchNormAttrs>();
        auto eps = relayToConstant<float>(inputs[7]);
        attrs->epsilon = eps;
@@ -289,11 +298,17 @@ RegisterTVMOperator reg({
        AT_CHECK(!relayIsNone(inputs[1]));
        AT_CHECK(!relayIsNone(inputs[2]));
        auto d = relayToConstant<float>(inputs[1]);
-       AT_CHECK(d <  1e-7, "aten::threshold_ only supported for threshold 0, got", d);
-       AT_CHECK(d > -1e-7, "aten::threshold_ only supported for threshold 0, got", d);
+       AT_CHECK(
+           d < 1e-7, "aten::threshold_ only supported for threshold 0, got", d);
+       AT_CHECK(
+           d > -1e-7,
+           "aten::threshold_ only supported for threshold 0, got",
+           d);
        d = relayToConstant<float>(inputs[2]);
-       AT_CHECK(d <  1e-7, "aten::threshold_ only supported for value 0, got", d);
-       AT_CHECK(d > -1e-7, "aten::threshold_ only supported for value 0, got", d);
+       AT_CHECK(
+           d < 1e-7, "aten::threshold_ only supported for value 0, got", d);
+       AT_CHECK(
+           d > -1e-7, "aten::threshold_ only supported for value 0, got", d);
        auto op = tvm::relay::Op::Get("nn.relu");
        auto out = tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(), {});
        return out;
@@ -321,16 +336,19 @@ RegisterTVMOperator reg({
        pool_attrs->ceil_mode = relayToConstant<bool>(inputs[4]);
        pool_attrs->count_include_pad = relayToConstant<bool>(inputs[5]);
 
-       auto out = tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(pool_attrs), {});
+       auto out = tvm::relay::CallNode::make(
+           op, {inputs[0]}, tvm::Attrs(pool_attrs), {});
        return out;
      }},
     {Symbol::fromQualString("aten::adaptive_avg_pool2d"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
-       static const tvm::relay::Op& op = tvm::relay::Op::Get("contrib.adaptive_avg_pool2d");
+       static const tvm::relay::Op& op =
+           tvm::relay::Op::Get("contrib.adaptive_avg_pool2d");
        auto pool_attrs = tvm::make_node<tvm::relay::AdaptivePool2DAttrs>();
        pool_attrs->output_size = relayToArray<tvm::relay::IndexExpr>(inputs[1]);
        pool_attrs->layout = "NCHW";
-       auto out = tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(pool_attrs), {});
+       auto out = tvm::relay::CallNode::make(
+           op, {inputs[0]}, tvm::Attrs(pool_attrs), {});
        return out;
      }},
     {Symbol::fromQualString("aten::max_pool2d"),
@@ -350,7 +368,8 @@ RegisterTVMOperator reg({
        pool_attrs->ceil_mode = relayToConstant<bool>(inputs[5]);
 
        static const tvm::relay::Op& op = tvm::relay::Op::Get("nn.max_pool2d");
-       auto out = tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(pool_attrs), {});
+       auto out = tvm::relay::CallNode::make(
+           op, {inputs[0]}, tvm::Attrs(pool_attrs), {});
        return out;
      }},
     {Symbol::fromQualString("aten::reshape"),
@@ -359,16 +378,22 @@ RegisterTVMOperator reg({
        auto attrs = tvm::make_node<tvm::relay::ReshapeAttrs>();
        attrs->newshape = relayToArray<tvm::Integer>(inputs[1]);
        AT_ASSERT(attrs->newshape.size() > 0);
-       AT_CHECK(static_cast<int64_t>(attrs->newshape[0]) != -1,
-                "WARNING: reshape with -1 as the first value has known incompatibility with PyTorch semantics.\n")
+       AT_CHECK(
+           static_cast<int64_t>(attrs->newshape[0]) != -1,
+           "WARNING: reshape with -1 as the first value has known incompatibility with PyTorch semantics.\n")
        attrs->reverse = false;
-       auto out = tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(attrs), {});
+       auto out =
+           tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(attrs), {});
        return out;
      }},
     {Symbol::fromQualString("aten::linear"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto dense_attrs = tvm::make_node<tvm::relay::DenseAttrs>();
-       auto out = tvm::relay::CallNode::make(tvm::relay::Op::Get("nn.dense"), {inputs[0], inputs[1]}, tvm::Attrs(dense_attrs), {});
+       auto out = tvm::relay::CallNode::make(
+           tvm::relay::Op::Get("nn.dense"),
+           {inputs[0], inputs[1]},
+           tvm::Attrs(dense_attrs),
+           {});
 
        if (!relayIsNone(inputs[2])) {
          auto bias_add_op = tvm::relay::Op::Get("nn.bias_add");
@@ -384,7 +409,9 @@ RegisterTVMOperator reg({
 bool isSupported(Node* node) {
   auto map = getTVMOperatorMap();
   auto can_handle = map.find(node->kind()) != map.end();
-  if (node->kind() == prim::Constant) { can_handle = true; }
+  if (node->kind() == prim::Constant) {
+    can_handle = true;
+  }
   return can_handle;
 }
 

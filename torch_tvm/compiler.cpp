@@ -21,13 +21,18 @@ tvm::relay::Var TVMCompiler::convertToRelay(Value* val, TVMContext ctx) {
     }
     // TODO: support non-float tensors
     auto t = tvm::relay::TensorTypeNode::make(sizes, ::tvm::Float(32));
-    auto v = tvm::relay::VarNode::make(val->debugName() + std::to_string(reinterpret_cast<std::uintptr_t>(val)), t);
+    auto v = tvm::relay::VarNode::make(
+        val->debugName() +
+            std::to_string(reinterpret_cast<std::uintptr_t>(val)),
+        t);
     return v;
   }
   AT_ASSERT(0);
 }
 
-tvm::relay::Expr TVMCompiler::convertToRelay(const IValue& val, TVMContext ctx) {
+tvm::relay::Expr TVMCompiler::convertToRelay(
+    const IValue& val,
+    TVMContext ctx) {
   // All doubles are converted to floats
   if (val.isDouble()) {
     auto x = tvm::runtime::NDArray::Empty(
@@ -85,7 +90,9 @@ tvm::relay::Expr TVMCompiler::convertToRelay(const IValue& val, TVMContext ctx) 
 }
 
 tvm::relay::Function TVMCompiler::convertToRelay(
-    std::shared_ptr<Graph> subgraph, TVMContext ctx, std::vector<Value*>* input_values) {
+    std::shared_ptr<Graph> subgraph,
+    TVMContext ctx,
+    std::vector<Value*>* input_values) {
   std::unordered_map<Value*, tvm::relay::Expr> value_map;
   tvm::Array<tvm::relay::Var> input_vars;
 
@@ -158,7 +165,8 @@ tvm::relay::Function TVMCompiler::convertToRelay(
     frontier = new_frontier;
   }
 
-  tvm::NodePtr<tvm::relay::TupleNode> n = tvm::make_node<tvm::relay::TupleNode>();
+  tvm::NodePtr<tvm::relay::TupleNode> n =
+      tvm::make_node<tvm::relay::TupleNode>();
   tvm::Array<tvm::relay::Expr> fields;
   for (const auto& sg_output : subgraph->outputs()) {
     AT_ASSERT(value_map.find(sg_output) != value_map.end());
@@ -168,8 +176,13 @@ tvm::relay::Function TVMCompiler::convertToRelay(
   auto output = tvm::relay::Tuple(n);
 
   tvm::Array<tvm::relay::Var> free_vars = tvm::relay::FreeVars(output);
-  AT_CHECK(free_vars.size() <= input_vars.size(), "Determined ", free_vars.size(),
-  " free vars but only ", input_vars.size(), " inputs");
+  AT_CHECK(
+      free_vars.size() <= input_vars.size(),
+      "Determined ",
+      free_vars.size(),
+      " free vars but only ",
+      input_vars.size(),
+      " inputs");
 
   return tvm::relay::FunctionNode::make(
       input_vars, output, tvm::relay::Type(), {});
@@ -215,24 +228,28 @@ void TVMCompiler::run(Stack& stack) {
     for (auto& kv : value_to_ivalue) {
       kv.first->inferTypeFrom(kv.second.toTensor());
     }
-    // bail out mechanism: try to convert to Relay, if it fails to convert the graph
-    // by any reason(i.e. op difference), depend on the user preference, either throw
-    // or fall back to the JIT interpreter for execution
+    // bail out mechanism: try to convert to Relay, if it fails to convert the
+    // graph by any reason(i.e. op difference), depend on the user preference,
+    // either throw or fall back to the JIT interpreter for execution
     tvm::relay::Function tvm_func;
     try {
       tvm_func = convertToRelay(subgraph_, ctx_, &cache_[spec].input_values);
-    } catch(const std::exception& e) {
+    } catch (const std::exception& e) {
       if (strict_) {
-        AT_ERROR("Pytorch TVM: fail to convert to relay, exception: ", e.what());
+        AT_ERROR(
+            "Pytorch TVM: fail to convert to relay, exception: ", e.what());
       }
-      LOG(WARNING) << "Pytorch TVM: fail to convert to relay, falling back to JIT for execution, exception: "<< e.what() << "\n";
+      LOG(WARNING)
+          << "Pytorch TVM: fail to convert to relay, falling back to JIT for execution, exception: "
+          << e.what() << "\n";
       InterpreterState(Code(subgraph_)).run(stack);
       return;
     }
     auto build_f = build_mod_.GetFunction("build", false);
     auto json_f = build_mod_.GetFunction("get_graph_json", false);
     auto mod_f = build_mod_.GetFunction("get_module", false);
-    tvm::Map<tvm::Integer, tvm::Target> target_map = {{ctx_.device_type, tvm::Target::Create(device_)}};
+    tvm::Map<tvm::Integer, tvm::Target> target_map = {
+        {ctx_.device_type, tvm::Target::Create(device_)}};
     build_f(tvm_func, target_map, tvm::Target::Create(host_));
     std::string json = json_f();
     tvm::runtime::Module mod = mod_f();
@@ -245,11 +262,13 @@ void TVMCompiler::run(Stack& stack) {
     cache_[spec].get_output = run_mod.GetFunction("get_output", false);
     auto get_num_outputs = run_mod.GetFunction("get_num_outputs", false);
     int n = get_num_outputs();
-    AT_CHECK(subgraph_->outputs().size() == n, "Compiled subgraph with mismatching num outputs");
+    AT_CHECK(
+        subgraph_->outputs().size() == n,
+        "Compiled subgraph with mismatching num outputs");
   }
 
   for (auto i = 0; i < cache_[spec].input_values.size(); ++i) {
-    auto *value = cache_[spec].input_values[i];
+    auto* value = cache_[spec].input_values[i];
     if (!value_to_ivalue.count(value)) {
       auto optional_ivalue = toIValue(value);
       AT_ASSERT(optional_ivalue.has_value());

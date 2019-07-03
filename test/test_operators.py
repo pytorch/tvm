@@ -6,6 +6,8 @@ import torch.nn.functional as F
 import torch
 
 # test jit tvm operators
+
+
 class TestOperators(TVMTest):
     @TVMTest.given(shape=TVMTest.rand_shape(rank=1))
     def test_add(self, shape):
@@ -59,7 +61,8 @@ class TestOperators(TVMTest):
         num_kernels=TVMTest.rand_int(),
         stride=TVMTest.rand_list(TVMTest.rand_int(1, 2), 2),
         padding=TVMTest.rand_list(TVMTest.rand_int(0, 4), 2),
-        dilation=TVMTest.rand_list(TVMTest.rand_int(1, 1), 2), # TODO known broken in TVM
+        dilation=TVMTest.rand_list(TVMTest.rand_int(
+            1, 1), 2),  # TODO known broken in TVM
     )
     def test_conv_complex(
         self, shape, kernel_size, num_kernels, stride, padding, dilation
@@ -88,8 +91,8 @@ class TestOperators(TVMTest):
         self, shape, kernel_size, stride, padding, dilation, groups, in_ch_per_group, out_ch_per_group
     ):
         # NCHW
-        in_channels = in_ch_per_group*groups
-        out_channels = out_ch_per_group*groups
+        in_channels = in_ch_per_group * groups
+        out_channels = out_ch_per_group * groups
         X = torch.rand(shape[0], in_channels, shape[1], shape[2])
         W = torch.rand(out_channels, in_ch_per_group, kernel_size, kernel_size)
 
@@ -175,6 +178,7 @@ class TestOperators(TVMTest):
     )
     def test_max_pool2d(self, shape, stride):
         X = torch.rand(shape)
+
         def max_pool2d(a):
             return F.max_pool2d(a, 3) + 2.0
 
@@ -198,6 +202,7 @@ class TestOperators(TVMTest):
         input = torch.rand(shape)
         weight = torch.rand(out_features, shape[1])
         bias = torch.rand(out_features)
+
         def linear(input, weight, bias):
             return F.linear(input, weight, bias) + 2.0
 

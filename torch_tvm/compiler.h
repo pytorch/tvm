@@ -13,7 +13,7 @@ struct TVMObject {
   tvm::PackedFunc set_input;
   tvm::PackedFunc get_output;
   // Map input indices to values in the subgraph
-  std::vector<torch::jit::Value *> input_values;
+  std::vector<torch::jit::Value*> input_values;
 };
 
 struct TVMCompiler {
@@ -39,9 +39,11 @@ struct TVMCompiler {
 
  public:
   static tvm::relay::Var convertToRelay(torch::jit::Value* val, TVMContext ctx);
-  static tvm::relay::Expr convertToRelay(const torch::jit::IValue& val, TVMContext ctx);
+  static tvm::relay::Expr convertToRelay(
+      const torch::jit::IValue& val,
+      TVMContext ctx);
   static tvm::relay::Function convertToRelay(
-      std::shared_ptr<torch::jit::Graph> subgraph, TVMContext ctx,
-      std::vector<torch::jit::Value*>* input_values = nullptr
-      );
+      std::shared_ptr<torch::jit::Graph> subgraph,
+      TVMContext ctx,
+      std::vector<torch::jit::Value*>* input_values = nullptr);
 };
