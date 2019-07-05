@@ -166,11 +166,13 @@ class cmake_build(setuptools.Command):
           
 
     def run(self):
-        is_initial_build = not os.path.exists(CMAKE_BUILD_DIR)
-        if is_initial_build:
+        if not os.path.exists(CMAKE_BUILD_DIR):
             os.makedirs(CMAKE_BUILD_DIR)
+
+        is_initial_build = not os.path.exists(os.path.join(CMAKE_BUILD_DIR, "CMakeCache.txt"))
         if is_initial_build or RERUN_CMAKE:
             self._run_cmake()
+
         self._run_build()
 
 
