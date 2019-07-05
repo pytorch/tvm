@@ -10,6 +10,7 @@ from test.util import TVMTest
 import unittest
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
+import os
 
 
 __all__ = [
@@ -418,7 +419,9 @@ class TestModels(TVMTest):
     def model_test(self, constructor):
         model = constructor(True)
         model.eval()
-        image = io.imread('test/cat.png')[:, :, :3].transpose(2, 0, 1)
+        d = os.path.dirname(os.path.abspath(__file__))
+        fn = os.path.join(d, "cat.png")
+        image = io.imread(fn)[:, :, :3].transpose(2, 0, 1)
         input_image = torch.unsqueeze(torch.Tensor(image), 0)
         ref_out, tvm_out = self.runBoth(model, input_image)
         # With CNN model tests we look for top-k similarity rather than
@@ -451,7 +454,9 @@ class TestModels(TVMTest):
     def test_resnetish(self):
         model = resnetish()
         model.eval()
-        image = io.imread('test/cat.png')[:, :, :3].transpose(2, 0, 1)
+        d = os.path.dirname(os.path.abspath(__file__))
+        fn = os.path.join(d, "cat.png")
+        image = io.imread(fn)[:, :, :3].transpose(2, 0, 1)
         input_image = torch.unsqueeze(torch.Tensor(image), 0)
         ref_out, tvm_out = self.runBoth(model, input_image)
         torch.testing.assert_allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)

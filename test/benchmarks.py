@@ -10,7 +10,9 @@ import os
 
 
 def genImage():
-    image = io.imread('test/cat.png')[:, :, :3].transpose(2, 0, 1)
+    d = os.path.dirname(os.path.abspath(__file__))
+    fn = os.path.join(d, "cat.png")
+    image = io.imread(fn)[:, :, :3].transpose(2, 0, 1)
     image = torch.unsqueeze(torch.Tensor(image), 0)
     return [image]
 
@@ -31,7 +33,9 @@ def benchmark(model, csv_file, input_fn=genImage, iters=100, warmup=10):
         jit_time = time.time() - start
         print("Done benchmarking JIT")
 
-        with autotvm.apply_history_best("test/autotvm_tuning.log"):
+        d = os.path.dirname(os.path.abspath(__file__))
+        fn = os.path.join(d, "autotvm_tuning.log")
+        with autotvm.apply_history_best(fn):
             torch_tvm.enable(opt_level=3)
             print("Tracing model with TVM")
             trace_tvm = torch.jit.trace(model, inputs)
