@@ -131,7 +131,8 @@ Below, in order, is a prioritized list of tasks for this repository.
   - [x] Backend selection (CPU/Cuda/OpenCL)
   - [x] Optimization level
 - [ ] Custom TVM operator registration
-  - Enable Python/C++ mechanism to use custom TVM operators and schedules
+  - [ ] Enable Python/C++ mechanism to use custom TVM operators and schedules
+  - [x] Enable Relay op registration
 - [x] Bail-out mechanism
   - When TVM cannot compile a subgraph, invoke PyTorch JIT fallback
 - [x] Extract Relay expression
@@ -140,7 +141,7 @@ Below, in order, is a prioritized list of tasks for this repository.
 ### v0.2 Plan
 
 - [ ] View support
-- [ ] Zero copy `set_input`
+- [x] Zero copy `set_input`
 - [ ] Subsystem integration
   - [ ] Threadpool integration
   - [ ] Allocator integration
