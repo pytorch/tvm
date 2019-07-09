@@ -82,20 +82,20 @@ class TestCore(TVMTest):
     def test_fall_back(self, shape):
         inputs = torch.rand(shape)
 
-        def reshape(input):
-            return torch.reshape(input, (-1,))
+        def add(input):
+            return torch.add(input, 1, 2)
 
-        jit_script_reshape = torch.jit.script(reshape)
+        jit_script_reshape = torch.jit.script(add)
         jit_out = jit_script_reshape(inputs)
 
         with self.assertRaises(RuntimeError):
-            tvm_strict_script_reshape = torch.jit.script(reshape)
+            tvm_strict_script_reshape = torch.jit.script(add)
             torch_tvm.enable(strict=True)
             tvm_out = tvm_strict_script_reshape(inputs)
             torch_tvm.disable()
 
         torch_tvm.enable(strict=False)
-        tvm_script_reshape = torch.jit.script(reshape)
+        tvm_script_reshape = torch.jit.script(add)
         tvm_out = tvm_script_reshape(inputs)
         torch_tvm.disable()
 
