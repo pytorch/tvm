@@ -51,6 +51,7 @@ RegisterTVMOperator::RegisterTVMOperator(std::vector<TVMOpMap> ops) {
         // NB: We assume all relay ops are pure
         auto options = c10::OperatorOptions();
         options.setAliasAnalysis(AliasAnalysisKind::PURE);
+	// TODO: Pass in operator options somehow
         auto torch_operator = Operator(
             FunctionSchema(
                 "tvm::" + op.name,
@@ -59,14 +60,11 @@ RegisterTVMOperator::RegisterTVMOperator(std::vector<TVMOpMap> ops) {
                 schema.returns(),
                 false,
                 false),
-            [cc](const Node* node) {
-              return [cc](Stack& stack) {
-                RECORD_FUNCTION("TVM", std::vector<c10::IValue>());
-                cc->run(stack);
-                return 0;
-              };
-            },
-            options);
+	      [cc](Stack& stack) {
+		RECORD_FUNCTION("TVM", std::vector<c10::IValue>());
+		cc->run(stack);
+		return 0;
+            });
         RegisterOperators torch_register_ops(
             std::vector<Operator>{torch_operator});
       }
@@ -378,9 +376,9 @@ RegisterTVMOperator reg({
        auto attrs = tvm::make_node<tvm::relay::ReshapeAttrs>();
        attrs->newshape = relayToArray<tvm::Integer>(inputs[1]);
        AT_ASSERT(attrs->newshape.size() > 0);
-       AT_CHECK(
-           static_cast<int64_t>(attrs->newshape[0]) != -1,
-           "WARNING: reshape with -1 as the first value has known incompatibility with PyTorch semantics.\n")
+       if (static_cast<int64_t>(attrs->newshape[0]) != -1) {
+	       std::cerr << "WARNING: reshape with -1 as the first value has known incompatibility with PyTorch semantics.\n";
+       }
        attrs->reverse = false;
        auto out =
            tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(attrs), {});
