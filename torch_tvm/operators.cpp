@@ -391,7 +391,6 @@ RegisterTVMOperator reg({
        TORCH_CHECK(n_dim == 2,
                    "WARNING: relay does not support dense operation on inputs more than 2 dim");
        auto dense_attrs = tvm::make_node<tvm::relay::DenseAttrs>();
-      //  dense_attrs->units = 
        auto out = tvm::relay::CallNode::make(
            tvm::relay::Op::Get("nn.dense"),
            {inputs[0], inputs[1]},
