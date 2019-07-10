@@ -69,6 +69,7 @@ class TVMTest(unittest.TestCase):
             # jit the function
             trace_jit = torch.jit.trace(func, inputs)
             ref_out = trace_jit(*inputs)
+            # print(trace_jit.graph)
 
             # jit the function and lower to TVM
             torch_tvm.enable()
@@ -77,6 +78,7 @@ class TVMTest(unittest.TestCase):
 
             with autotvm.apply_history_best(fn):
                 trace_tvm = torch.jit.trace(func, inputs)
+                print(trace_tvm.graph_for(*inputs))
                 try:
                     tvm_out = trace_tvm(*inputs)
                 except Exception as e:

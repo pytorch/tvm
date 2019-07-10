@@ -206,8 +206,14 @@ class TestOperators(TVMTest):
         def linear(input, weight, bias):
             return F.linear(input, weight, bias) + 2.0
 
+        def linear_no_bias(input, weight):
+            return F.linear(input, weight) + 2.0
+
         ref_out, tvm_out = self.runBoth(linear, input, weight, bias)
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
+
+        ref_out_no_bias, tvm_out_no_bias = self.runBoth(linear_no_bias, input, weight)
+        assert torch.allclose(ref_out_no_bias, tvm_out_no_bias, rtol=0.01, atol=0.01)
 
     @TVMTest.given(
         shape=TVMTest.rand_shape(rank=2, min_dim=4),

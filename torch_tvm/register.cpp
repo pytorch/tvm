@@ -8,6 +8,7 @@
 
 #include "compiler.h"
 #include "operators.h"
+#include "fuse_linear.h"
 
 namespace py = pybind11;
 using namespace torch::jit;
@@ -48,6 +49,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
   // a tvm::CompilationGroup
   RegisterPass pass([](std::shared_ptr<Graph>& g) {
     if (fusion_enabled) {
+      FuseLinear(g);
       CustomFuseGraph(g, isSupported, tvm_sym);
     }
   });
