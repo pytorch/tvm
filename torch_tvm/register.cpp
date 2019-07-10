@@ -82,14 +82,14 @@ PYBIND11_MODULE(_torch_tvm, m) {
         for (auto node : g->nodes()) {
           count++;
         }
-        AT_CHECK(
+        TORCH_CHECK(
             count == 1,
             "This program cannot be exported as a single Relay expression.");
         for (auto node : g->nodes()) {
           if (node->kind() == tvm_sym) {
             std::vector<Value*> v;
             auto subgraph = node->g(attr::Subgraph);
-            AT_CHECK(
+            TORCH_CHECK(
                 subgraph->inputs().size() == inputs.size(),
                 "Expected ",
                 subgraph->inputs().size(),
@@ -104,7 +104,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
             relay_exprs[++relay_exprs_uuid] = expr;
             return relay_exprs_uuid;
           } else {
-            AT_CHECK(
+            TORCH_CHECK(
                 0,
                 "This program contains non-Relay expressions that cannot be exported.");
           }
