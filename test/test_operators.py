@@ -1,5 +1,6 @@
 import unittest
 from test.util import TVMTest
+from torch.testing import FileCheck
 
 import torch
 import torch.nn.functional as F
@@ -194,6 +195,46 @@ class TestOperators(TVMTest):
         ref_out, tvm_out = self.runBoth(max_pool2d_strides_padding_ceil_mode, X)
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
+
+    @TVMTest.given(
+        shape=TVMTest.rand_shape(rank=2, min_dim=4),
+        out_features=TVMTest.rand_int(3, 6),
+    )
+    def test_fuse_linear_pattern_match(self, shape, out_features):
+        input = torch.rand(shape)
+        weight = torch.rand(out_features, shape[1])
+        bias = torch.rand(out_features)
+
+        def linear_addmm(input, weight, bias):
+            return torch.addmm(bias, input, weight.t())
+
+        def linear_matmul_add(input, weight, bias):
+            output = input.matmul(weight.t())
+            output += bias
+            return output
+
+        def linear_matmul(input, weight):
+            return input.matmul(weight.t())
+
+        import torch_tvm
+        torch_tvm.enable()
+        # test addmm
+        scripted_addmm = torch.jit.script(linear_matmul_add)
+        addmm_graph = scripted_addmm.graph_for(input, weight, bias)
+        FileCheck().check("aten::linear").check_not("addmm").check_not("aten::t").run(str(addmm_graph))
+
+        # test matmul + add
+        scripted_matmul_add = torch.jit.script(linear_matmul_add)
+        matmul_add_graph = scripted_matmul_add.graph_for(input, weight, bias)
+        FileCheck().check("aten::linear").check_not("matmul").check_not("aten::t").run(str(matmul_add_graph))
+
+        # test matmul
+        scripted_matmul = torch.jit.script(linear_matmul)
+        matmul_graph = scripted_matmul.graph_for(input, weight)
+        FileCheck().check("aten::linear").check_not("matmul").check_not("aten::t").run(str(matmul_graph))
+        torch_tvm.disable()
+
+
     @TVMTest.given(
         shape=TVMTest.rand_shape(rank=2, min_dim=4),
         out_features=TVMTest.rand_int(3, 6),
@@ -206,8 +247,14 @@ class TestOperators(TVMTest):
         def linear(input, weight, bias):
             return F.linear(input, weight, bias) + 2.0
 
+        def linear_no_bias(input, weight):
+            return F.linear(input, weight) + 2.0
+
         ref_out, tvm_out = self.runBoth(linear, input, weight, bias)
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
+
+        ref_out_no_bias, tvm_out_no_bias = self.runBoth(linear_no_bias, input, weight)
+        assert torch.allclose(ref_out_no_bias, tvm_out_no_bias, rtol=0.01, atol=0.01)
 
     @TVMTest.given(
         shape=TVMTest.rand_shape(rank=2, min_dim=4),
