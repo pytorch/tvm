@@ -5,15 +5,7 @@
 
 ## Build
 
-For improved performance, you'll need to build PyTorch on top of this PR: https://github.com/pytorch/pytorch/pull/20284
-```
-cd pytorch
-git fetch origin pull/20284/head:tvm_dev
-git checkout tvm_dev
-python setup.py install
-```
-
-Otherwise, install the latest Nightly build of PyTorch.
+Install the latest Nightly build of PyTorch.
 
 Then, build this repo
 ```
