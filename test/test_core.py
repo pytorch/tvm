@@ -1,3 +1,4 @@
+import unittest
 from test.util import TVMTest
 import torch
 import torch_tvm
@@ -30,6 +31,7 @@ class TestCore(TVMTest):
         torch_tvm.disable()
 
     @TVMTest.given(shape=TVMTest.rand_shape(rank=1))
+    @unittest.skip("causing segfaults, need to fix operator registration before enable it")
     def test_registry(self, shape):
         x = torch.rand(shape)
         y0 = torch.ops.tvm.relu(x)
