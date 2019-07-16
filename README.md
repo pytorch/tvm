@@ -24,6 +24,7 @@ python setup.py test
 This package transparently hooks into PyTorch's JIT, so the same tooling is applicable (see `@torch.jit.script`, `torch.jit.trace` and `graph_for`).  See below for an example.
 
 ```
+import torch
 import torch_tvm
 
 torch_tvm.enable()
