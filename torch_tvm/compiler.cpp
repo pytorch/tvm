@@ -98,6 +98,59 @@ tvm::relay::Expr TVMCompiler::convertToRelay(
       0, "Cannot convert value ", val, " to Relay yet.  Please file a bug.\n");
 }
 
+tvm::relay::Expr convertLoop(
+    Node* node,
+    tvm::Array<tvm::relay::Expr> inputs,
+    TVMContext ctx) {
+  auto iterate = tvm::relay::GlobalVarNode::make("iterate");
+  auto t = tvm::relay::TensorTypeNode::make({1}, ::tvm::Float(32));
+  tvm::relay::Var x = tvm::relay::VarNode::make("x", t);
+  tvm::relay::Var y = tvm::relay::VarNode::make("y", t);
+
+  auto zero = tvm::runtime::NDArray::Empty(
+      {}, tvm::runtime::String2TVMType("int32"), ctx);
+  reinterpret_cast<int32_t*>(zero->data)[0] = 0;
+  auto zero_var = tvm::relay::ConstantNode::make(zero);
+
+  auto one = tvm::runtime::NDArray::Empty(
+      {}, tvm::runtime::String2TVMType("int32"), ctx);
+  reinterpret_cast<int32_t*>(one->data)[0] = 1;
+  auto one_var = tvm::relay::ConstantNode::make(one);
+
+  auto subtract = tvm::relay::Op::Get("subtract");
+  auto add = tvm::relay::Op::Get("add");
+
+  auto equal = tvm::relay::Op::Get("equal");
+
+  auto mod = tvm::relay::ModuleNode::make({}, {});
+
+  tvm::Array<tvm::relay::Expr> cond_inp = {x, zero_var};
+  tvm::Array<tvm::relay::Expr> if_inp = {y, one_var};
+  tvm::Array<tvm::relay::Expr> else_inp = {x, one_var};
+  tvm::Array<tvm::relay::Expr> iter_inp = {
+      tvm::relay::CallNode::make(subtract, else_inp, tvm::Attrs(), {})};
+  auto body = tvm::relay::IfNode::make(
+      tvm::relay::CallNode::make(equal, cond_inp, tvm::Attrs(), {}),
+      tvm::relay::CallNode::make(add, if_inp, tvm::Attrs(), {}),
+      tvm::relay::CallNode::make(iterate, iter_inp, tvm::Attrs(), {}));
+  tvm::Array<tvm::relay::Expr> kek = {x, y};
+  tvm::Array<tvm::relay::Var> kek_var = {x, y};
+  // tvm::NodePtr<tvm::relay::TupleNode> n =
+  //    tvm::make_node<tvm::relay::TupleNode>();
+  // tvm::Array<tvm::relay::Expr> fields = {
+  // n->fields = std::move(fields);
+  // auto output = tvm::relay::Tuple(n);
+  // auto f = tvm::relay::CallNode::make(body, kek, tvm::Attrs(), {});
+  mod->Add(
+      iterate,
+      tvm::relay::FunctionNode::make(kek_var, body, tvm::relay::Type(), {}));
+  tvm::Array<tvm::relay::Expr> real_inp = {inputs[0], inputs[1]};
+  auto out = tvm::relay::CallNode::make(iterate, real_inp, tvm::Attrs(), {});
+  return out;
+  // return iterate;//tvm::relay::CallNode::make(iterate, {inputs[0],
+  // inputs[1]}, tvm::Attrs(), {});
+}
+
 tvm::relay::Function TVMCompiler::convertToRelay(
     std::shared_ptr<Graph> subgraph,
     TVMContext ctx,
@@ -152,6 +205,17 @@ tvm::relay::Function TVMCompiler::convertToRelay(
         // Things like prim::Return
         if (use.user->outputs().size() < 1) {
           continue;
+        }
+        if (use.user->kind() == prim::Loop) {
+          auto loop = convertLoop(use.user, relay_inputs, ctx);
+          for (const auto& output : use.user->outputs()) {
+            // auto n = tvm::make_node<tvm::relay::TupleGetItemNode>();
+            // n->tuple = loop;
+            // n->index = index;
+            value_map[output] = loop; // tvm::relay::TupleGetItem(n);
+            // index++;
+            new_frontier.emplace_back(output);
+          }
         }
         // if there are 2+ outputs, getOperator returns a tuple
         if (use.user->outputs().size() == 1) {

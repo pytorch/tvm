@@ -5,11 +5,39 @@ from torch.testing import FileCheck
 import torch
 import torch.nn.functional as F
 import torch
+import torch_tvm
 
 # test jit tvm operators
 
 
 class TestOperators(TVMTest):
+    def test_loop(self):
+        shape = (1,2,3)
+        x = torch.rand(shape)
+        y = torch.rand(shape)
+
+        @torch.jit.script
+        def loop_ref(a, c):
+            for i in range(100):
+               a = a + c
+            return a + c
+
+        ref = loop_ref(x, y)
+
+        torch_tvm.enable()
+        @torch.jit.script
+        def loop(a, c):
+            for i in range(100):
+               a = a + c
+            return a + c
+
+        print(loop.graph_for(x,y))
+        tvmd = loop(x, y)
+        torch_tvm.disable()
+
+        assert torch.allclose(ref, tvmd)
+      
+
     @TVMTest.given(shape=TVMTest.rand_shape(rank=1))
     def test_add(self, shape):
         x = torch.rand(shape)
