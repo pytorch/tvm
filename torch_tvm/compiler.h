@@ -6,7 +6,8 @@
 #include <tvm/relay/op.h>
 #include <tvm/relay/analysis.h>
 #include <tvm/build_module.h>
-#include <tvm/tvm.h>
+#include <tvm/operation.h>
+
 #include <vector>
 
 struct TVMObject {

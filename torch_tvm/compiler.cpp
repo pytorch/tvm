@@ -15,9 +15,9 @@ tvm::relay::Var TVMCompiler::convertToRelay(Value* val, TVMContext ctx) {
   }
   if (val->isCompleteTensor()) {
     auto pt_t = val->type()->cast<CompleteTensorType>();
-    tvm::Array<HalideIR::Expr> sizes;
+    tvm::Array<tvm::relay::IndexExpr> sizes;
     for (const auto& size : pt_t->sizes()) {
-      sizes.push_back(HalideIR::Expr(static_cast<int32_t>(size)));
+      sizes.push_back(tvm::relay::IndexExpr(static_cast<int32_t>(size)));
     }
     // TODO: support non-float tensors
     auto t = tvm::relay::TensorTypeNode::make(sizes, ::tvm::Float(32));
