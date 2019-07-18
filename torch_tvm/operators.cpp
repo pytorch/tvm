@@ -413,11 +413,7 @@ RegisterTVMOperator reg({
 
 bool isSupported(Node* node) {
   auto map = getTVMOperatorMap();
-  auto can_handle = map.find(node->kind()) != map.end();
-  if (node->kind() == prim::Constant) {
-    can_handle = true;
-  }
-  return can_handle;
+  return map.find(node->kind()) != map.end();
 }
 
 tvm::relay::Expr getOperator(Node* node, tvm::Array<tvm::relay::Expr> inputs) {
