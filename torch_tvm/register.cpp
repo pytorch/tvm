@@ -5,6 +5,7 @@
 #include <torch/csrc/jit/pass_manager.h>
 #include <torch/csrc/jit/passes/graph_fuser.h>
 #include <torch/csrc/jit/pybind_utils.h>
+#include <torch/csrc/jit/jit_log.h>
 
 #include "compiler.h"
 #include "operators.h"
@@ -35,6 +36,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
   RegisterOperators op({Operator(
       tvm_sym,
       [](const Node* node) {
+        GRAPH_DUMP("A graph passed to TVMCompiler\n", node->g(attr::Subgraph));
         auto cc = std::make_shared<TVMCompiler>(
             node, opt_level, strict, device_type, device, host);
         return [cc](Stack& stack) {

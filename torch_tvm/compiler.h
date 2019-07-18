@@ -15,6 +15,7 @@ struct TVMObject {
   tvm::PackedFunc get_output;
   // Map input indices to values in the subgraph
   std::vector<torch::jit::Value*> input_values;
+  bool invalid = true;
 };
 
 struct TVMCompiler {
@@ -29,7 +30,7 @@ struct TVMCompiler {
 
  private:
   std::shared_ptr<torch::jit::Graph> subgraph_;
-  std::unordered_map<torch::jit::CompleteArgumentSpec, TVMObject> cache_;
+  c10::optional<TVMObject> cache_;
   TVMContext ctx_;
   int opt_level_;
   bool strict_;
