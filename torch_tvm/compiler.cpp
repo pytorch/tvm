@@ -9,7 +9,6 @@
 using namespace torch::jit;
 
 tvm::relay::Var TVMCompiler::convertToRelay(Value* val, TVMContext ctx) {
-  std::cout << "setting type for val " << val->debugName() << std::endl;
   auto optional_ivalue = toIValue(val);
 
   tvm::Array<HalideIR::Expr> sizes;
@@ -23,7 +22,6 @@ tvm::relay::Var TVMCompiler::convertToRelay(Value* val, TVMContext ctx) {
       sizes.push_back(HalideIR::Expr(static_cast<int32_t>(size)));
     }
   } else if (optional_ivalue.has_value()) {
-    std::cout << "inferring type from\n";
     // TODO: inferTypeFrom should eventually create ProfiledTensorTypes
     val->inferTypeFrom(optional_ivalue.value().toTensor());
     auto pt_t = val->type()->expect<CompleteTensorType>();
@@ -109,12 +107,8 @@ tvm::relay::Function TVMCompiler::convertToRelay(
     std::vector<Value*>* input_values) {
   std::unordered_map<Value*, tvm::relay::Expr> value_map;
   tvm::Array<tvm::relay::Var> input_vars;
-
-
-  std::cout << "subgraph:\n";
-  subgraph->dump();
   for (const auto& input : subgraph->inputs()) {
-    AT_ASSERT(input->type()->cast<ProfiledTensorType>());
+    TORCH_INTERNAL_ASSERT(input->type()->cast<ProfiledTensorType>());
     auto v = convertToRelay(input, ctx);
     input_vars.push_back(v);
     if (input_values) {
