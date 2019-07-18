@@ -2,7 +2,6 @@
 #include <torch/csrc/jit/ir.h>
 #include <tvm/relay/expr.h>
 #include <tvm/relay/op.h>
-#include <tvm/tvm.h>
 
 bool isSupported(torch::jit::Node* node);
 tvm::relay::Expr getOperator(
