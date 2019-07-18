@@ -35,8 +35,12 @@ PYBIND11_MODULE(_torch_tvm, m) {
   RegisterOperators op({Operator(
       tvm_sym,
       [](const Node* node) {
+        std::cout << "before TVMCompiler:\n";
+        node->g(attr::Subgraph)->dump();
         auto cc = std::make_shared<TVMCompiler>(
             node, opt_level, strict, device_type, device, host);
+        std::cout << "printing node for tvmcompgroup:\n";
+        node->g(attr::Subgraph)->dump();
         return [cc](Stack& stack) {
           RECORD_FUNCTION("TVM", std::vector<c10::IValue>());
           cc->run(stack);
