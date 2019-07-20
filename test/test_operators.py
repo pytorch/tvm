@@ -286,6 +286,23 @@ class TestOperators(TVMTest):
         ref_out, tvm_out = self.runBoth(reshape, input)
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
+    @TVMTest.given(
+        shape=TVMTest.rand_shape(rank=2, min_dim=4),
+    )
+    def test_softmax(self, shape):
+        input = torch.rand(shape)
+
+        def softmax(input):
+            return torch.softmax(input, axis=0)
+
+        ref_out, tvm_out = self.runBoth(softmax, input)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
+
+        def softmax(input):
+            return torch.softmax(input, axis=1)
+
+        ref_out, tvm_out = self.runBoth(softmax, input)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
 if __name__ == "__main__":
     unittest.main()

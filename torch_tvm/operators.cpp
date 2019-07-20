@@ -409,6 +409,17 @@ RegisterTVMOperator reg({
        }
        return out;
      }},
+     {Symbol::fromQualString("aten::softmax"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       auto softmax_op = tvm::relay::Op::Get("nn.softmax");
+       auto softmax_attrs = tvm::make_node<tvm::relay::SoftmaxAttrs>();
+       auto axis = relayToConstant<int64_t>(inputs[1]);
+       softmax_attrs->axis = axis;
+       return tvm::relay::CallNode::make(
+         softmax_op,
+         { inputs[0] },
+         tvm::Attrs(softmax_attrs));
+     }},
 });
 
 bool isSupported(Node* node) {
