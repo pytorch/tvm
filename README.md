@@ -140,7 +140,18 @@ Below, in order, is a prioritized list of tasks for this repository.
   - [ ] Allocator integration
     - `tvm/include/tvm/runtime/device_api.h`
   - [ ] Distributed communication
-- [ ] Advanced IR integration
+- [ ] IR integration
   - [ ] Control flow
   - [ ] Aliasing
+- [ ] Operators
+  - [ ] transpose
+  - [ ] chunk
+  - [ ] repeat
+  - [ ] cat
+  - [ ] unsqueeze
+  - [ ] slice
+  - [ ] softmax
+  - [ ] bmm
+  - [ ] layernorm
+
 
