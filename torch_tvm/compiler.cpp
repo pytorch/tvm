@@ -32,7 +32,16 @@ tvm::relay::DataType scalarTypeToTVMType(at::ScalarType pt_type) {
 tvm::relay::Var TVMCompiler::convertToRelay(Value* val, TVMContext ctx) {
   auto optional_ivalue = toIValue(val);
   if (optional_ivalue.has_value()) {
-    val->inferTypeFrom(optional_ivalue.value().toTensor());
+    if (optional_ivalue.value().isTensor()) {
+      val->inferTypeFrom(optional_ivalue.value().toTensor());
+    } else {
+      auto expr = convertToRelay(optional_ivalue.value(), ctx)
+                      .as<tvm::relay::ConstantNode>();
+      return tvm::relay::VarNode::make(
+          val->debugName() +
+              std::to_string(reinterpret_cast<std::uintptr_t>(val)),
+          expr->tensor_type());
+    }
   }
   if (val->isCompleteTensor()) {
     auto pt_t = val->type()->cast<CompleteTensorType>();
@@ -247,7 +256,18 @@ void TVMCompiler::run(Stack& stack) {
 
   if (cache_.find(spec) == cache_.end()) {
     for (auto& kv : value_to_ivalue) {
-      kv.first->inferTypeFrom(kv.second.toTensor());
+      if (kv.second.isTensor()) {
+        kv.first->inferTypeFrom(kv.second.toTensor());
+      } else if (kv.second.isInt()) {
+        kv.first->setType(IntType::get());
+      } else {
+        AT_CHECK(
+            0,
+            "Cannot handle this type yet ",
+            kv.second,
+            "\nGraph:\n",
+            *subgraph_);
+      }
     }
     // bail out mechanism: try to convert to Relay, if it fails to convert the
     // graph by any reason(i.e. op difference), depend on the user preference,

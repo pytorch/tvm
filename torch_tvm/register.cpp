@@ -3,12 +3,11 @@
 #include <torch/csrc/jit/custom_operator.h>
 #include <torch/csrc/jit/operator_options.h>
 #include <torch/csrc/jit/pass_manager.h>
-#include <torch/csrc/jit/passes/graph_fuser.h>
 #include <torch/csrc/jit/pybind_utils.h>
 
 #include "compiler.h"
-#include "operators.h"
 #include "fuse_linear.h"
+#include "fusion_pass.h"
 
 namespace py = pybind11;
 using namespace torch::jit;
@@ -23,7 +22,6 @@ static int opt_level = 2;
 static std::string device_type = "cpu";
 static std::string device = "llvm -mcpu=core-avx2";
 static std::string host = "llvm -mcpu=core-avx2";
-static auto tvm_sym = Symbol::fromQualString("tvm::CompilationGroup");
 
 static std::unordered_map<size_t, tvm::relay::Expr> relay_exprs;
 static size_t relay_exprs_uuid = 0;
@@ -33,7 +31,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
   auto options = c10::OperatorOptions();
   options.setAliasAnalysis(AliasAnalysisKind::PURE);
   RegisterOperators op({Operator(
-      tvm_sym,
+      getTVMSymbol(),
       [](const Node* node) {
         auto cc = std::make_shared<TVMCompiler>(
             node, opt_level, strict, device_type, device, host);
@@ -50,7 +48,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
   RegisterPass pass([](std::shared_ptr<Graph>& g) {
     if (fusion_enabled) {
       FuseLinear(g);
-      CustomFuseGraph(g, isSupported, tvm_sym);
+      FuseSupportedOps(g);
     }
   });
 
@@ -88,7 +86,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
             count == 1,
             "This program cannot be exported as a single Relay expression.");
         for (auto node : g->nodes()) {
-          if (node->kind() == tvm_sym) {
+          if (node->kind() == getTVMSymbol()) {
             std::vector<Value*> v;
             auto subgraph = node->g(attr::Subgraph);
             TORCH_CHECK(
