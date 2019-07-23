@@ -19,11 +19,6 @@ value_list sortReverseTopological(ArrayRef<Value*> inputs, Block* block) {
 
 bool canHandle(Block* block, AliasDb& aliasDb);
 bool canHandle(Node* node, AliasDb& aliasDb) {
-  if (aliasDb.hasWriters(node)) {
-    if (!aliasDb.isInPlace(node)) {
-      return false;
-    }
-  }
   if (node->kind() == prim::Constant) {
     return true;
   }
@@ -53,6 +48,17 @@ c10::optional<Node*> tryMerge(
       aliasDb.moveBeforeTopologicallyValid(producer, consumer);
 
   if (!canMerge) {
+    return c10::nullopt;
+  }
+
+  // Consumer is only allowed to have writers
+  if (aliasDb.hasInputWriters(consumer)) {
+    if (!aliasDb.isInPlace(producer)) {
+      return c10::nullopt;
+    }
+  }
+
+  if (aliasDb.hasOutputWriters(consumer)) {
     return c10::nullopt;
   }
 
