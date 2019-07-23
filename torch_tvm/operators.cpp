@@ -2,6 +2,7 @@
 #include <tvm/relay/attrs/nn.h>
 #include <tvm/relay/attrs/transform.h>
 #include "compiler.h"
+#include "fusion_pass.h" // tvm_sym
 
 #include <torch/csrc/autograd/record_function.h>
 #include <torch/csrc/jit/custom_operator.h>
@@ -44,8 +45,7 @@ RegisterTVMOperator::RegisterTVMOperator(std::vector<TVMOpMap> ops) {
         wrapper_graph.appendNode(node);
         wrapper_graph.registerOutput(node->output());
 
-        Symbol tvm_sym = Symbol::fromQualString("tvm::CompilationGroup");
-        node = SubgraphUtils::createSingletonSubgraph(node, tvm_sym);
+        node = SubgraphUtils::createSingletonSubgraph(node, getTVMSymbol());
         auto cc = std::make_shared<TVMCompiler>(node);
 
         // NB: We assume all relay ops are pure
@@ -413,11 +413,7 @@ RegisterTVMOperator reg({
 
 bool isSupported(Node* node) {
   auto map = getTVMOperatorMap();
-  auto can_handle = map.find(node->kind()) != map.end();
-  if (node->kind() == prim::Constant) {
-    can_handle = true;
-  }
-  return can_handle;
+  return map.find(node->kind()) != map.end();
 }
 
 tvm::relay::Expr getOperator(Node* node, tvm::Array<tvm::relay::Expr> inputs) {
