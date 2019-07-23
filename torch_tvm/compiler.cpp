@@ -240,7 +240,12 @@ void TVMCompiler::run(Stack& stack) {
       } else if (kv.second.isInt()) {
         kv.first->setType(IntType::get());
       } else {
-        AT_CHECK(0, "Cannot handle this type yet ", kv.second, "\nGraph:\n", *subgraph_);
+        AT_CHECK(
+            0,
+            "Cannot handle this type yet ",
+            kv.second,
+            "\nGraph:\n",
+            *subgraph_);
       }
     }
     // bail out mechanism: try to convert to Relay, if it fails to convert the
