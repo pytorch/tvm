@@ -288,18 +288,13 @@ class TestOperators(TVMTest):
 
     @TVMTest.given(
         shape=TVMTest.rand_shape(rank=2, min_dim=4),
+        axis=TVMTest.rand_int(0, 2),
     )
-    def test_softmax(self, shape):
+    def test_softmax(self, shape, axis):
         input = torch.rand(shape)
 
         def softmax(input):
-            return torch.softmax(input, axis=0)
-
-        ref_out, tvm_out = self.runBoth(softmax, input)
-        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
-
-        def softmax(input):
-            return torch.softmax(input, axis=1)
+            return torch.softmax(input, axis=axis)
 
         ref_out, tvm_out = self.runBoth(softmax, input)
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
