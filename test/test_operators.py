@@ -288,7 +288,7 @@ class TestOperators(TVMTest):
 
     @TVMTest.given(
         shape=TVMTest.rand_shape(rank=2, min_dim=4),
-        axis=TVMTest.rand_int(0, 2),
+        axis=TVMTest.rand_int(0, 1),
     )
     def test_softmax(self, shape, axis):
         input = torch.rand(shape)
