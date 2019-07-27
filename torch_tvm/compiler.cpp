@@ -8,6 +8,27 @@
 
 using namespace torch::jit;
 
+
+tvm::relay::DataType scalarTypeToTVMType(at::ScalarType pt_type) {
+  static const std::unordered_map<at::ScalarType, tvm::relay::DataType> type_mapping = {
+    {at::ScalarType::Float, ::tvm::Float(32)},
+    {at::ScalarType::Double, ::tvm::Float(64)},
+    {at::ScalarType::Int, ::tvm::Int(32)},
+    {at::ScalarType::Long, ::tvm::Int(64)},
+    {at::ScalarType::Bool, ::tvm::Bool()},
+    {at::ScalarType::Char, ::tvm::Int(8)},
+    {at::ScalarType::Byte, ::tvm::UInt(8)},
+    {at::ScalarType::QInt8, ::tvm::Int(8)},
+    {at::ScalarType::QUInt8, ::tvm::UInt(8)},
+    {at::ScalarType::QInt32, ::tvm::Int(32)},
+  };
+
+  TORCH_CHECK(type_mapping.find(pt_type) != type_mapping.end(),
+              "could not handle the type ", pt_type,
+              " when creating tensor type node in TVM");
+  return type_mapping.at(pt_type);
+}
+
 tvm::relay::Var TVMCompiler::convertToRelay(Value* val, TVMContext ctx) {
   auto optional_ivalue = toIValue(val);
   if (optional_ivalue.has_value()) {
@@ -19,15 +40,15 @@ tvm::relay::Var TVMCompiler::convertToRelay(Value* val, TVMContext ctx) {
     for (const auto& size : pt_t->sizes()) {
       sizes.push_back(tvm::relay::IndexExpr(static_cast<int32_t>(size)));
     }
-    // TODO: support non-float tensors
-    auto t = tvm::relay::TensorTypeNode::make(sizes, ::tvm::Float(32));
+    at::ScalarType pt_type = pt_t->scalarType();
+    auto t = tvm::relay::TensorTypeNode::make(sizes, scalarTypeToTVMType(pt_type));
     auto v = tvm::relay::VarNode::make(
         val->debugName() +
             std::to_string(reinterpret_cast<std::uintptr_t>(val)),
         t);
     return v;
   }
-  AT_ASSERT(0);
+  TORCH_INTERNAL_ASSERT(0);
 }
 
 tvm::relay::Expr TVMCompiler::convertToRelay(
@@ -38,8 +59,8 @@ tvm::relay::Expr TVMCompiler::convertToRelay(
     auto x = tvm::runtime::NDArray::Empty(
         {}, tvm::runtime::String2TVMType("float32"), ctx);
     auto d = val.toDouble();
-    AT_CHECK(d <= std::numeric_limits<float>::max());
-    AT_CHECK(d >= std::numeric_limits<float>::lowest());
+    TORCH_CHECK(d <= std::numeric_limits<float>::max());
+    TORCH_CHECK(d >= std::numeric_limits<float>::lowest());
     auto f = static_cast<float>(d);
     reinterpret_cast<float*>(x->data)[0] = f;
     auto v = tvm::relay::ConstantNode::make(x);
@@ -50,8 +71,8 @@ tvm::relay::Expr TVMCompiler::convertToRelay(
     auto x = tvm::runtime::NDArray::Empty(
         {}, tvm::runtime::String2TVMType("int32"), ctx);
     auto l = val.toInt();
-    AT_CHECK(l <= std::numeric_limits<int32_t>::max());
-    AT_CHECK(l >= std::numeric_limits<int32_t>::lowest());
+    TORCH_CHECK(l <= std::numeric_limits<int32_t>::max());
+    TORCH_CHECK(l >= std::numeric_limits<int32_t>::lowest());
     reinterpret_cast<int32_t*>(x->data)[0] = l;
     auto v = tvm::relay::ConstantNode::make(x);
     return v;
@@ -77,15 +98,15 @@ tvm::relay::Expr TVMCompiler::convertToRelay(
     for (const auto& elem : val.toIntList()) {
       auto x = tvm::runtime::NDArray::Empty(
           {}, tvm::runtime::String2TVMType("int32"), ctx);
-      AT_CHECK(elem <= std::numeric_limits<int32_t>::max());
-      AT_CHECK(elem >= std::numeric_limits<int32_t>::lowest());
+      TORCH_CHECK(elem <= std::numeric_limits<int32_t>::max());
+      TORCH_CHECK(elem >= std::numeric_limits<int32_t>::lowest());
       reinterpret_cast<int32_t*>(x->data)[0] = elem;
       auto v = tvm::relay::ConstantNode::make(x);
       tuple_elems.push_back(v);
     }
     return tvm::relay::TupleNode::make(tuple_elems);
   }
-  AT_CHECK(
+  TORCH_CHECK(
       0, "Cannot convert value ", val, " to Relay yet.  Please file a bug.\n");
 }
 
@@ -97,7 +118,7 @@ tvm::relay::Function TVMCompiler::convertToRelay(
   tvm::Array<tvm::relay::Var> input_vars;
 
   for (const auto& input : subgraph->inputs()) {
-    AT_ASSERT(input->isCompleteTensor());
+    TORCH_INTERNAL_ASSERT(input->isCompleteTensor());
     auto v = convertToRelay(input, ctx);
     input_vars.push_back(v);
     if (input_values) {
@@ -169,14 +190,14 @@ tvm::relay::Function TVMCompiler::convertToRelay(
       tvm::make_node<tvm::relay::TupleNode>();
   tvm::Array<tvm::relay::Expr> fields;
   for (const auto& sg_output : subgraph->outputs()) {
-    AT_ASSERT(value_map.find(sg_output) != value_map.end());
+    TORCH_INTERNAL_ASSERT(value_map.find(sg_output) != value_map.end());
     fields.push_back(value_map[sg_output]);
   }
   n->fields = std::move(fields);
   auto output = tvm::relay::Tuple(n);
 
   tvm::Array<tvm::relay::Var> free_vars = tvm::relay::FreeVars(output);
-  AT_CHECK(
+  TORCH_CHECK(
       free_vars.size() <= input_vars.size(),
       "Determined ",
       free_vars.size(),
@@ -208,7 +229,7 @@ TVMCompiler::TVMCompiler(
   ctx_.device_id = 0;
   subgraph_ = node->g(attr::Subgraph);
   auto pfb = tvm::runtime::Registry::Get("relay.build_module._BuildModule");
-  AT_ASSERT(pfb);
+  TORCH_INTERNAL_ASSERT(pfb);
   build_mod_ = (*pfb)();
 }
 
@@ -254,7 +275,7 @@ void TVMCompiler::run(Stack& stack) {
     std::string json = json_f();
     tvm::runtime::Module mod = mod_f();
     auto pfr = tvm::runtime::Registry::Get("tvm.graph_runtime.create");
-    AT_ASSERT(pfr);
+    TORCH_INTERNAL_ASSERT(pfr);
     tvm::runtime::Module run_mod =
         (*pfr)(json, mod, (int)ctx_.device_type, (int)ctx_.device_id);
     cache_[spec].set_input = run_mod.GetFunction("set_input_zero_copy", false);
@@ -262,7 +283,7 @@ void TVMCompiler::run(Stack& stack) {
     cache_[spec].get_output = run_mod.GetFunction("get_output", false);
     auto get_num_outputs = run_mod.GetFunction("get_num_outputs", false);
     int n = get_num_outputs();
-    AT_CHECK(
+    TORCH_CHECK(
         subgraph_->outputs().size() == n,
         "Compiled subgraph with mismatching num outputs");
   }
@@ -271,7 +292,7 @@ void TVMCompiler::run(Stack& stack) {
     auto* value = cache_[spec].input_values[i];
     if (!value_to_ivalue.count(value)) {
       auto optional_ivalue = toIValue(value);
-      AT_ASSERT(optional_ivalue.has_value());
+      TORCH_INTERNAL_ASSERT(optional_ivalue.has_value());
       value_to_ivalue[value] = optional_ivalue.value();
     }
     auto ivalue = value_to_ivalue.at(cache_[spec].input_values[i]);
