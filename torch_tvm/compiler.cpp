@@ -11,12 +11,16 @@ using namespace torch::jit;
 
 tvm::relay::DataType scalarTypeToTVMType(at::ScalarType pt_type) {
   static const std::unordered_map<at::ScalarType, tvm::relay::DataType> type_mapping = {
-    {at::ScalarType::Double, ::tvm::Float(64)},
     {at::ScalarType::Float, ::tvm::Float(32)},
+    {at::ScalarType::Double, ::tvm::Float(64)},
     {at::ScalarType::Int, ::tvm::Int(32)},
     {at::ScalarType::Long, ::tvm::Int(64)},
     {at::ScalarType::Bool, ::tvm::Bool()},
+    {at::ScalarType::Char, ::tvm::Int(8)},
     {at::ScalarType::Byte, ::tvm::UInt(8)},
+    {at::ScalarType::QInt8, ::tvm::Int(8)},
+    {at::ScalarType::QUInt8, ::tvm::UInt(8)},
+    {at::ScalarType::QInt32, ::tvm::Int(32)},
   };
 
   TORCH_CHECK(type_mapping.find(pt_type) != type_mapping.end(),
