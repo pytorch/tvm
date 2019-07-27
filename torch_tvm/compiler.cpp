@@ -40,7 +40,6 @@ tvm::relay::Var TVMCompiler::convertToRelay(Value* val, TVMContext ctx) {
     for (const auto& size : pt_t->sizes()) {
       sizes.push_back(tvm::relay::IndexExpr(static_cast<int32_t>(size)));
     }
-    // TODO: support non-float tensors
     at::ScalarType pt_type = pt_t->scalarType();
     auto t = tvm::relay::TensorTypeNode::make(sizes, scalarTypeToTVMType(pt_type));
     auto v = tvm::relay::VarNode::make(
