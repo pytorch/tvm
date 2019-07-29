@@ -36,10 +36,10 @@ void registerCustomTopiSchedules() {
                const tvm::relay::Type& out_type,
                const tvm::Target& target) -> tvm::Array<tvm::Tensor> {
               const relay::CustomLayerNormAttrs* param = attrs.as<relay::CustomLayerNormAttrs>();
-              auto normalized_axis = param->axis;
+              auto num_axis_to_normalize = param->num_axis_to_normalize;
               auto affine = param->affine;
               return tvm::Array<tvm::Tensor>{topi::custom_layer_norm(
-                    inputs[0], inputs[1], inputs[2], normalized_axis, affine)};
+                    inputs[0], inputs[1], inputs[2], num_axis_to_normalize, affine, eps)};
             }),
         10);
     reg("nn.custom_layer_norm",

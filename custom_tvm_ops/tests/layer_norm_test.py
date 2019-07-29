@@ -65,7 +65,9 @@ class CustomLayerNormUtils(object):
             build_config, weight=None, bias=None):
         ctx = build_config.ctx
         target = build_config.target
-        weight_shape = shape[normalized_axis[0]:]
+        num_axis_to_normalize = len(normalized_axis)
+        start_index = len(shape) - num_axis_to_normalize
+        weight_shape = shape[start_index:]
         input_ph = tvm.placeholder(shape, name='input_placeholder')
         weights_ph = tvm.placeholder(weight_shape, name='weights_placeholder')
         bias_ph = tvm.placeholder(weight_shape, name='bias_placeholder')
@@ -74,7 +76,7 @@ class CustomLayerNormUtils(object):
         if weight is not None and bias is not None:
             affine = True
         normalized_output_ph = layer_norm(input_ph, weights_ph, bias_ph, \
-                normalized_axis, affine)
+                num_axis_to_normalize, affine, CustomLayerNormUtils.EPSILON_FLOAT)
         s = tvm.create_schedule([normalized_output_ph.op])
         #optimize_schedule(s, normalized_output_ph)
         if affine:
@@ -104,7 +106,9 @@ class CustomLayerNormUtils(object):
         compile_engine = tvm.relay.backend.compile_engine.get()
         tvm.relay.backend.compile_engine.CompileEngine.clear(compile_engine)
         # Assume normalized axis is sorted.
-        weight_shape = shape[normalized_axis[0]:]
+        num_axis_to_normalize = len(normalized_axis)
+        start_index = len(shape) - num_axis_to_normalize
+        weight_shape = shape[start_index:]
         data_ph = relay.var("data", relay.TensorType(shape, "float32"))
         weight_ph = relay.var("weight_ph", relay.TensorType(weight_shape, "float32"))
         bias_ph = relay.var("bias_ph", relay.TensorType(weight_shape, "float32"))
@@ -114,7 +118,7 @@ class CustomLayerNormUtils(object):
         # TODO: Should really fix this. Do a python wrapper in tvm style
         # to hide _make call.
         out_ph = relay.op.nn._make.custom_layer_norm(data_ph, weight_ph, bias_ph, \
-                normalized_axis, affine)
+                num_axis_to_normalize, affine, CustomLayerNormUtils.EPSILON_FLOAT)
         func = relay.Function([data_ph, weight_ph, bias_ph], out_ph)
         func_mod = relay.module.Module.from_expr(func)
         intrp = relay.create_executor("graph", mod=func_mod, ctx=ctx, target=target)

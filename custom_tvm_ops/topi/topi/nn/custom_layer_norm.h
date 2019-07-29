@@ -109,8 +109,15 @@ inline Tensor custom_layer_norm_impl_affine(const Tensor& data, const Tensor& ga
 }
 
 inline Tensor custom_layer_norm(const Tensor& data, const Tensor& gamma,
-    const Tensor& beta, const Array<Integer>& normalized_axis,
-    const bool affine) {
+    const Tensor& beta, const int num_axis_to_normalize,
+    const bool affine, const float eps) {
+  int data_num_dims = data->shape.size();
+  CHECK(num_axis_to_normalize < data_num_dims);
+  int index = (data_num_dims - num_axis_to_normalize);
+  Array<Integer> normalized_axis;
+  for (int i = 0; index < data_num_dims; ++i, ++index) {
+    normalized_axis.push_back(Integer(index));
+  }
   if (affine) {
     return custom_layer_norm_impl_affine(data, gamma, beta, normalized_axis);
   }

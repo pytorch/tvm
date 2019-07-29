@@ -12,11 +12,11 @@ namespace tvm {
 namespace relay {
 
 Expr MakeCustomLayerNorm(Expr data, Expr gamma, Expr beta,
-    const Array<Integer>& normalize_axis,
-    const bool affine) {
+    const int num_axis_to_normalize,
+    const bool affine, const double eps) {
   //CHECK(data.as<Tensor>()->shape.size() > normalize_axis.size());
   auto attrs = make_node<CustomLayerNormAttrs>();
-  attrs->axis = normalize_axis;
+  attrs->num_axis_to_normalize= num_axis_to_normalize;
   attrs->affine = affine;
   static const Op& op = Op::Get("nn.custom_layer_norm");
   return CallNode::make(op, {data, gamma, beta}, Attrs(attrs), {});
@@ -45,21 +45,17 @@ bool CustomLayerNormRel(
   CHECK(data->dtype == Float(32));
 
   auto layer_norm_attrs_ptr = attrs.as<CustomLayerNormAttrs>();
-  auto axis = layer_norm_attrs_ptr->axis;
-  CHECK_GT(axis.size(), 0);
-  // Right now no negative indexing supported.
-  for (const auto& ax : axis) {
-    CHECK_GT(*(as_const_int(ax)), 0);
-    CHECK_LT(*(as_const_int(ax)), data->shape.size());
-  }
+  auto num_axis_to_normalize = layer_norm_attrs_ptr->num_axis_to_normalize;
+  CHECK_GT(num_axis_to_normalize , 0);
+  CHECK_LT(num_axis_to_normalize , data->shape.size());
 
   const auto* gamma = types[1].as<TensorTypeNode>();
   const auto* beta = types[2].as<TensorTypeNode>();
   if (gamma && beta) {
-    CHECK_EQ(gamma->shape.size(), axis.size());
-    CHECK_EQ(beta->shape.size(), axis.size());
-    for (int64_t i = 0; i < axis.size(); ++i) {
-      int64_t data_index = i + (data_size - axis.size());
+    CHECK_EQ(gamma->shape.size(), num_axis_to_normalize);
+    CHECK_EQ(beta->shape.size(), num_axis_to_normalize);
+    for (int64_t i = 0; i < num_axis_to_normalize; ++i) {
+      int64_t data_index = i + (data_size - num_axis_to_normalize);
       CHECK_EQ(*as_const_int(data->shape[data_index]),
           *as_const_int(gamma->shape[i]));
       CHECK_EQ(*as_const_int(data->shape[data_index]),
