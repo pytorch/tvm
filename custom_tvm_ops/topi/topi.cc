@@ -18,8 +18,9 @@ using namespace tvm::runtime;
 
 TVM_REGISTER_GLOBAL("nn.custom_layer_norm")
     .set_body([](TVMArgs args, TVMRetValue* rv) {
-      CHECK(args.size() == 5);
-      *rv = custom_layer_norm(args[0], args[1], args[2], args[3], args[4]);
+      CHECK(args.size() == 6);
+      *rv = custom_layer_norm(args[0], args[1], args[2],
+          args[3], args[4],static_cast<double>(args[5]));
     });
 
 TVM_REGISTER_GLOBAL("topi.generic.schedule_custom_layer_norm")

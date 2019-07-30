@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "operators.h"
 #include <tvm/relay/attrs/nn.h>
 #include <tvm/relay/attrs/transform.h>
@@ -7,6 +9,8 @@
 #include <torch/csrc/jit/custom_operator.h>
 #include <torch/csrc/jit/operator_options.h>
 #include <torch/csrc/jit/passes/utils/subgraph_utils.h>
+
+#include <custom_tvm_ops/attrs/layer_norm_attrs.h>
 
 using namespace torch::jit;
 
@@ -215,6 +219,50 @@ RegisterTVMOperator reg({
        }
        return out;
      }},
+    {Symbol::fromQualString("aten::layer_norm"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) -> tvm::relay::Expr {
+       auto op = tvm::relay::Op::Get("nn.custom_layer_norm");
+       TORCH_CHECK(
+           inputs.size() == 6,
+           "layer_norm received ",
+           inputs.size(),
+           " inputs");
+       // Need to ensure that cudnn_enabled=False. However the default value of that is
+       // true so need to make sure the input's device is cpu.
+       auto pt_normalized_axis = relayToArray<tvm::relay::IndexExpr>(inputs[1]);
+       auto attrs = tvm::make_node<tvm::relay::CustomLayerNormAttrs>();
+       attrs->num_axis_to_normalize = pt_normalized_axis.size();
+       auto eps = static_cast<double>(relayToConstant<float>(inputs[4]));
+       attrs->eps = eps;
+
+       auto weight_ph = tvm::relay::TensorTypeNode::make(pt_normalized_axis, tvm::Float(32));
+       auto bias_ph = tvm::relay::TensorTypeNode::make(pt_normalized_axis, tvm::Float(32));
+       tvm::relay::Expr weight, bias;
+       weight = tvm::relay::VarNode::make("weight_ph", weight_ph);
+       bias = tvm::relay::VarNode::make("bias_ph", bias_ph);
+       if (!relayIsNone(inputs[2])) {
+         TORCH_CHECK(!relayIsNone(inputs[3]), "If weight tensor is present"
+             "then bias tensor must be present as well.");
+         attrs->affine = true;
+         weight = inputs[2];
+         bias = inputs[3];
+       }
+
+       TVMContext ctx_;
+       ctx_.device_type = kDLCPU;
+       ctx_.device_id = 0;
+
+       tvm::Array<tvm::relay::Expr> ln_inputs = {
+           inputs[0],
+           weight,
+           bias,
+       };
+
+       auto out =
+           tvm::relay::CallNode::make(op, ln_inputs, tvm::Attrs(attrs), {});
+       TORCH_CHECK(node->outputs().size() == 1);
+       return out;
+     }},
     {Symbol::fromQualString("aten::batch_norm"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) -> tvm::relay::Expr {
        auto op = tvm::relay::Op::Get("nn.batch_norm");
@@ -269,6 +317,9 @@ RegisterTVMOperator reg({
        auto out =
            tvm::relay::CallNode::make(op, bn_inputs, tvm::Attrs(attrs), {});
        TORCH_INTERNAL_ASSERT(node->outputs().size() == 1);
+       // Is this right? Seems strange to use tupleget node if we are returning before that.
+       // On the other hand it does not seem that batch_norm returns more than one
+       // output. TODO?
        if (node->outputs().size() == 2) {
          return out;
        }

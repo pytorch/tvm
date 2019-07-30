@@ -93,6 +93,9 @@ tvm::relay::Expr TVMCompiler::convertToRelay(
     auto v = tvm::relay::ConstantNode::make(x);
     return v;
   }
+  // TODO: This can be just NDArray of num elements of IntList.
+  // We do not need to construct single element NDArrays and push them
+  // into tuple_elems? Is that true?
   if (val.isIntList()) {
     tvm::Array<tvm::relay::Expr> tuple_elems;
     for (const auto& elem : val.toIntList()) {
@@ -197,13 +200,16 @@ tvm::relay::Function TVMCompiler::convertToRelay(
   auto output = tvm::relay::Tuple(n);
 
   tvm::Array<tvm::relay::Var> free_vars = tvm::relay::FreeVars(output);
-  TORCH_CHECK(
-      free_vars.size() <= input_vars.size(),
-      "Determined ",
-      free_vars.size(),
-      " free vars but only ",
-      input_vars.size(),
-      " inputs");
+  // Changing this to warning because layer norm may not make use of optional weight
+  // bias Vars. TODO: Figure out a better way of error checking.
+  if (free_vars.size() <= input_vars.size()) {
+    AT_WARN(
+        "Determined ",
+        free_vars.size(),
+        " free vars but only ",
+        input_vars.size(),
+        " inputs");
+  }
 
   return tvm::relay::FunctionNode::make(
       input_vars, output, tvm::relay::Type(), {});
