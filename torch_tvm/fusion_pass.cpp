@@ -1,6 +1,9 @@
 #include "fusion_pass.h"
 #include "operators.h"
 
+#include <torch/csrc/jit/passes/common_subexpression_elimination.h>
+#include <torch/csrc/jit/passes/dead_code_elimination.h>
+
 using namespace torch::jit;
 
 value_list sortReverseTopological(ArrayRef<Value*> inputs, Block* block) {
@@ -93,6 +96,8 @@ void FuseSupportedOps(std::shared_ptr<Graph> graph) {
   for (auto it = block->nodes().rbegin(); it != block->nodes().rend();) {
     it = scanNode(*it, aliasDb, block);
   }
+  EliminateCommonSubexpression(graph);
+  EliminateDeadCode(graph);
 }
 
 const torch::jit::Symbol& getTVMSymbol() {
