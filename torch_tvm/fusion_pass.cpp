@@ -56,7 +56,7 @@ c10::optional<Node*> tryMerge(
 
   // Consumer is only allowed to have writers
   if (aliasDb.hasInputWriters(consumer)) {
-    if (!aliasDb.isInPlace(producer)) {
+    if (!aliasDb.isMutable(producer)) {
       return c10::nullopt;
     }
   }
