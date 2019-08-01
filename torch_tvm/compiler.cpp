@@ -8,19 +8,6 @@
 
 using namespace torch::jit;
 
-tvm::relay::DataType tvmScalarType(Value* val) {
-  auto optional_ivalue = toIValue(val);
-  if (optional_ivalue.has_value()) {
-    val->inferTypeFrom(optional_ivalue.value().toTensor());
-  }
-  if (val->isCompleteTensor()) {
-    auto pt_t = val->type()->cast<CompleteTensorType>();
-    at::ScalarType pt_type = pt_t->scalarType();
-    return scalarTypeToTVMType(pt_type);
-  }
-  TORCH_INTERNAL_ASSERT(0);
-}
-
 tvm::relay::DataType scalarTypeToTVMType(at::ScalarType pt_type) {
   static const std::unordered_map<at::ScalarType, tvm::relay::DataType> type_mapping = {
     {at::ScalarType::Float, ::tvm::Float(32)},
@@ -216,14 +203,13 @@ tvm::relay::Function TVMCompiler::convertToRelay(
   tvm::Array<tvm::relay::Var> free_vars = tvm::relay::FreeVars(output);
   // Changing this to warning because layer norm may not make use of optional weight
   // bias Vars. TODO: Figure out a better way of error checking.
-  if (free_vars.size() <= input_vars.size()) {
-    AT_WARN(
-        "Determined ",
-        free_vars.size(),
-        " free vars but only ",
-        input_vars.size(),
-        " inputs");
-  }
+  TORCH_CHECK(
+    free_vars.size() <= input_vars.size(),
+    "Determined ",
+    free_vars.size(),
+    " free vars but only ",
+    input_vars.size(),
+    " inputs");
 
   return tvm::relay::FunctionNode::make(
       input_vars, output, tvm::relay::Type(), {});

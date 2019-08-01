@@ -5,11 +5,12 @@
 #include <tvm/relay/expr.h>
 #include <tvm/runtime/packed_func.h>
 
-#include "attrs/layer_norm_attrs.h"
+#include <custom_tvm_ops/relay/layer_norm_attrs.h>
+
 #include "topi_init.h"
 #include "topi/generic/injective.h"
-#include "topi/generic/custom_layer_norm.h"
-#include "topi/nn/custom_layer_norm.h"
+#include "custom_layer_norm_generic_sched.h"
+#include "custom_layer_norm.h"
 
 #include <mutex>
 

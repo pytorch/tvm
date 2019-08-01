@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.7)
 
 file(GLOB TORCH_TVM_SRCS
   ${CMAKE_CURRENT_SOURCE_DIR}/torch_tvm/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/torch_tvm/custom_tvm_ops/relay/*.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/torch_tvm/custom_tvm_ops/topi/*.cc
 )
 
 set(CMAKE_CXX_STANDARD 11)
@@ -23,17 +25,16 @@ link_directories(${PYTORCH_DIR}/lib)
 
 add_subdirectory(pybind11)
 add_subdirectory(${TVM_DIR})
-add_subdirectory(custom_tvm_ops)
 
 pybind11_add_module(_torch_tvm SHARED ${TORCH_TVM_SRCS})
 target_link_libraries(_torch_tvm PUBLIC
-  torch pybind11 tvm tvm_topi custom_tvm_ops_topi
-  custom_tvm_ops_relay)
+  torch pybind11 tvm tvm_topi)
 
 target_include_directories(_torch_tvm PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/torch_tvm
     ${TVM_DIR}/include
+    ${TVM_DIR}/src
     ${TVM_DIR}/include/HalideIR
     ${TVM_DIR}/3rdparty/dmlc-core/include/
     ${TVM_DIR}/3rdparty/dlpack/include/

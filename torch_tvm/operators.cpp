@@ -10,7 +10,7 @@
 #include <torch/csrc/jit/operator_options.h>
 #include <torch/csrc/jit/passes/utils/subgraph_utils.h>
 
-#include <custom_tvm_ops/attrs/layer_norm_attrs.h>
+#include "custom_tvm_ops/relay/layer_norm_attrs.h"
 
 using namespace torch::jit;
 
@@ -228,7 +228,8 @@ RegisterTVMOperator reg({
            inputs.size(),
            " inputs");
        auto normalized_axis_shape = relayToArray<tvm::Integer>(inputs[1]);
-       std::vector<int64_t> shape(normalized_axis_shape.size());
+       std::vector<int64_t> shape;
+       shape.reserve(normalized_axis_shape.size());
        for (auto& dim : normalized_axis_shape) {
          shape.push_back(dim);
        }
@@ -241,11 +242,10 @@ RegisterTVMOperator reg({
        ctx_.device_type = kDLCPU;
        ctx_.device_id = 0;
 
-       auto input_tvm_type = tvmScalarType(node->input(0));
        auto weight_temp = tvm::runtime::NDArray::Empty(shape,
-           input_tvm_type, ctx_);
+           tvm::Float(32), ctx_);
        auto bias_temp = tvm::runtime::NDArray::Empty(shape,
-           input_tvm_type, ctx_);
+           tvm::Float(32), ctx_);
        tvm::relay::Expr weight, bias;
        weight = tvm::relay::ConstantNode::make(weight_temp);
        bias = tvm::relay::ConstantNode::make(bias_temp);

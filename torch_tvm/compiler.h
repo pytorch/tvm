@@ -14,9 +14,6 @@
 
 using namespace torch::jit;
 
-tvm::relay::DataType tvmScalarType(Value* val);
-tvm::relay::DataType scalarTypeToTVMType(at::ScalarType pt_type);
-
 struct TVMObject {
   tvm::PackedFunc kernel;
   tvm::PackedFunc set_input;

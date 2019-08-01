@@ -4,8 +4,8 @@
 #include <tvm/runtime/packed_func.h>
 #include <tvm/runtime/registry.h>
 
-#include "topi/generic/custom_layer_norm.h"
-#include "topi/nn/custom_layer_norm.h"
+#include "custom_layer_norm_generic_sched.h"
+#include "custom_layer_norm.h"
 
 #include "topi_init.h"
 

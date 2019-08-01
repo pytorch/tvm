@@ -4,7 +4,7 @@
 #include <relay/op/op_common.h>
 #include <relay/op/type_relations.h>
 #include <relay/pass/alter_op_layout.h>
-#include "attrs/layer_norm_attrs.h"
+#include "layer_norm_attrs.h"
 
 #include <cstdint>
 
@@ -62,7 +62,7 @@ bool CustomLayerNormRel(
           *as_const_int(beta->shape[i]));
     }
   }
-  reporter->Assign(types[3], TensorTypeNode::make(data->shape, Float(32)));
+  reporter->Assign(types[3], TensorTypeNode::make(data->shape, data->dtype));
   return true;
 }
 
