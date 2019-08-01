@@ -227,19 +227,28 @@ RegisterTVMOperator reg({
            "layer_norm received ",
            inputs.size(),
            " inputs");
-       // Need to ensure that cudnn_enabled=False. However the default value of that is
-       // true so need to make sure the input's device is cpu.
-       auto pt_normalized_axis = relayToArray<tvm::relay::IndexExpr>(inputs[1]);
+       auto normalized_axis_shape = relayToArray<tvm::Integer>(inputs[1]);
+       std::vector<int64_t> shape(normalized_axis_shape.size());
+       for (auto& dim : normalized_axis_shape) {
+         shape.push_back(dim);
+       }
        auto attrs = tvm::make_node<tvm::relay::CustomLayerNormAttrs>();
-       attrs->num_axis_to_normalize = pt_normalized_axis.size();
+       attrs->num_axis_to_normalize = normalized_axis_shape.size();
        auto eps = static_cast<double>(relayToConstant<float>(inputs[4]));
        attrs->eps = eps;
 
-       auto weight_ph = tvm::relay::TensorTypeNode::make(pt_normalized_axis, tvm::Float(32));
-       auto bias_ph = tvm::relay::TensorTypeNode::make(pt_normalized_axis, tvm::Float(32));
+       TVMContext ctx_;
+       ctx_.device_type = kDLCPU;
+       ctx_.device_id = 0;
+
+       auto input_tvm_type = tvmScalarType(node->input(0));
+       auto weight_temp = tvm::runtime::NDArray::Empty(shape,
+           input_tvm_type, ctx_);
+       auto bias_temp = tvm::runtime::NDArray::Empty(shape,
+           input_tvm_type, ctx_);
        tvm::relay::Expr weight, bias;
-       weight = tvm::relay::VarNode::make("weight_ph", weight_ph);
-       bias = tvm::relay::VarNode::make("bias_ph", bias_ph);
+       weight = tvm::relay::ConstantNode::make(weight_temp);
+       bias = tvm::relay::ConstantNode::make(bias_temp);
        if (!relayIsNone(inputs[2])) {
          TORCH_CHECK(!relayIsNone(inputs[3]), "If weight tensor is present"
              "then bias tensor must be present as well.");
@@ -247,10 +256,6 @@ RegisterTVMOperator reg({
          weight = inputs[2];
          bias = inputs[3];
        }
-
-       TVMContext ctx_;
-       ctx_.device_type = kDLCPU;
-       ctx_.device_id = 0;
 
        tvm::Array<tvm::relay::Expr> ln_inputs = {
            inputs[0],
@@ -317,9 +322,6 @@ RegisterTVMOperator reg({
        auto out =
            tvm::relay::CallNode::make(op, bn_inputs, tvm::Attrs(attrs), {});
        TORCH_INTERNAL_ASSERT(node->outputs().size() == 1);
-       // Is this right? Seems strange to use tupleget node if we are returning before that.
-       // On the other hand it does not seem that batch_norm returns more than one
-       // output. TODO?
        if (node->outputs().size() == 2) {
          return out;
        }

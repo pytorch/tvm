@@ -8,6 +8,18 @@
 
 using namespace torch::jit;
 
+tvm::relay::DataType tvmScalarType(Value* val) {
+  auto optional_ivalue = toIValue(val);
+  if (optional_ivalue.has_value()) {
+    val->inferTypeFrom(optional_ivalue.value().toTensor());
+  }
+  if (val->isCompleteTensor()) {
+    auto pt_t = val->type()->cast<CompleteTensorType>();
+    at::ScalarType pt_type = pt_t->scalarType();
+    return scalarTypeToTVMType(pt_type);
+  }
+  TORCH_INTERNAL_ASSERT(0);
+}
 
 tvm::relay::DataType scalarTypeToTVMType(at::ScalarType pt_type) {
   static const std::unordered_map<at::ScalarType, tvm::relay::DataType> type_mapping = {
@@ -35,7 +47,12 @@ tvm::relay::Var TVMCompiler::convertToRelay(Value* val, TVMContext ctx) {
     val->inferTypeFrom(optional_ivalue.value().toTensor());
   }
   if (val->isCompleteTensor()) {
+    // Ensure if complete tensor has device type then it is CPU
+    // otherwise it is assume to be CPU.
     auto pt_t = val->type()->cast<CompleteTensorType>();
+    auto device_type = pt_t->device();
+    AT_CHECK(device_type == at::DeviceType::CPU,
+      "Expected CPU device type but got:", device_type);
     tvm::Array<tvm::relay::IndexExpr> sizes;
     for (const auto& size : pt_t->sizes()) {
       sizes.push_back(tvm::relay::IndexExpr(static_cast<int32_t>(size)));
@@ -93,9 +110,6 @@ tvm::relay::Expr TVMCompiler::convertToRelay(
     auto v = tvm::relay::ConstantNode::make(x);
     return v;
   }
-  // TODO: This can be just NDArray of num elements of IntList.
-  // We do not need to construct single element NDArrays and push them
-  // into tuple_elems? Is that true?
   if (val.isIntList()) {
     tvm::Array<tvm::relay::Expr> tuple_elems;
     for (const auto& elem : val.toIntList()) {
