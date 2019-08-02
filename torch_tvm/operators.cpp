@@ -242,10 +242,22 @@ RegisterTVMOperator reg({
        ctx_.device_type = kDLCPU;
        ctx_.device_id = 0;
 
-       auto weight_temp = tvm::runtime::NDArray::Empty(shape,
-           tvm::Float(32), ctx_);
-       auto bias_temp = tvm::runtime::NDArray::Empty(shape,
-           tvm::Float(32), ctx_);
+       auto val = node->input(0);
+       auto pt_t = val->type()->cast<CompleteTensorType>();
+       tvm::runtime::NDArray weight_temp, bias_temp;
+       if (pt_t) {
+         auto pt_t_scalar_type = pt_t->scalarType();
+         auto tvm_scalar_type = scalarTypeToTVMType(pt_t_scalar_type);
+         weight_temp = tvm::runtime::NDArray::Empty(shape,
+             tvm_scalar_type, ctx_);
+         bias_temp = tvm::runtime::NDArray::Empty(shape,
+             tvm_scalar_type, ctx_);
+       } else {
+         weight_temp = tvm::runtime::NDArray::Empty(shape,
+             tvm::Float(32), ctx_);
+         bias_temp = tvm::runtime::NDArray::Empty(shape,
+             tvm::Float(32), ctx_);
+       }
        tvm::relay::Expr weight, bias;
        weight = tvm::relay::ConstantNode::make(weight_temp);
        bias = tvm::relay::ConstantNode::make(bias_temp);

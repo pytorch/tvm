@@ -8,11 +8,9 @@
 #include <tvm/build_module.h>
 #include <tvm/operation.h>
 
-#include <torch/csrc/jit/ir.h>
-
 #include <vector>
 
-using namespace torch::jit;
+tvm::relay::DataType scalarTypeToTVMType(at::ScalarType pt_type);
 
 struct TVMObject {
   tvm::PackedFunc kernel;

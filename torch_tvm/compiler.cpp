@@ -204,12 +204,12 @@ tvm::relay::Function TVMCompiler::convertToRelay(
   // Changing this to warning because layer norm may not make use of optional weight
   // bias Vars. TODO: Figure out a better way of error checking.
   TORCH_CHECK(
-    free_vars.size() <= input_vars.size(),
-    "Determined ",
-    free_vars.size(),
-    " free vars but only ",
-    input_vars.size(),
-    " inputs");
+      free_vars.size() <= input_vars.size(),
+      "Determined ",
+      free_vars.size(),
+      " free vars but only ",
+      input_vars.size(),
+      " inputs");
 
   return tvm::relay::FunctionNode::make(
       input_vars, output, tvm::relay::Type(), {});

@@ -14,7 +14,6 @@ namespace relay {
 Expr MakeCustomLayerNorm(Expr data, Expr gamma, Expr beta,
     const int num_axis_to_normalize,
     const bool affine, const double eps) {
-  //CHECK(data.as<Tensor>()->shape.size() > normalize_axis.size());
   auto attrs = make_node<CustomLayerNormAttrs>();
   attrs->num_axis_to_normalize= num_axis_to_normalize;
   attrs->affine = affine;
@@ -62,7 +61,7 @@ bool CustomLayerNormRel(
           *as_const_int(beta->shape[i]));
     }
   }
-  reporter->Assign(types[3], TensorTypeNode::make(data->shape, data->dtype));
+  reporter->Assign(types[3], types[0]);
   return true;
 }
 

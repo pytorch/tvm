@@ -50,7 +50,7 @@ class CustomLayerNormUtils(object):
         divide_2 = output_tensor.op.input_tensors[2]
         schedule[divide_1].compute_inline()
         schedule[divide_2].compute_inline()
-        #schedule[mean_var_sum].compute_at(s[normalized_output_ph], normalized_output_ph.op.axis[0])
+        schedule[mean_var_sum].compute_at(s[normalized_output_ph], normalized_output_ph.op.axis[0])
 
     @staticmethod
     def tvm_layer_norm_via_topi(a, a_out, shape, normalized_axis, \
@@ -70,7 +70,6 @@ class CustomLayerNormUtils(object):
         normalized_output_ph = layer_norm(input_ph, weights_ph, bias_ph, \
                 num_axis_to_normalize, affine, CustomLayerNormUtils.EPSILON_FLOAT)
         s = tvm.create_schedule([normalized_output_ph.op])
-        #optimize_schedule(s, normalized_output_ph)
         if affine:
             layer_norm_func = tvm.build(s, [input_ph, weights_ph, \
                     bias_ph, normalized_output_ph], target=target)
