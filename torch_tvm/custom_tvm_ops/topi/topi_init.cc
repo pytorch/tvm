@@ -4,11 +4,11 @@
 #include <tvm/relay/op_attr_types.h>
 #include <tvm/relay/expr.h>
 #include <tvm/runtime/packed_func.h>
+#include <topi/generic/injective.h>
 
 #include <custom_tvm_ops/relay/layer_norm_attrs.h>
 
 #include "topi_init.h"
-#include "topi/generic/injective.h"
 #include "custom_layer_norm_generic_sched.h"
 #include "custom_layer_norm.h"
 

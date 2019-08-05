@@ -201,8 +201,6 @@ tvm::relay::Function TVMCompiler::convertToRelay(
   auto output = tvm::relay::Tuple(n);
 
   tvm::Array<tvm::relay::Var> free_vars = tvm::relay::FreeVars(output);
-  // Changing this to warning because layer norm may not make use of optional weight
-  // bias Vars. TODO: Figure out a better way of error checking.
   TORCH_CHECK(
       free_vars.size() <= input_vars.size(),
       "Determined ",
