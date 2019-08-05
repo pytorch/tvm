@@ -3,6 +3,7 @@
 
 #include <torch/csrc/jit/passes/common_subexpression_elimination.h>
 #include <torch/csrc/jit/passes/dead_code_elimination.h>
+#include <torch/csrc/jit/jit_log.h>
 
 using namespace torch::jit;
 
@@ -42,37 +43,59 @@ bool canHandle(Block* block, AliasDb& aliasDb) {
   return true;
 }
 
+#define REQ(cond) if (!(cond)) { \
+  GRAPH_DEBUG("Failed cond "#cond"\n"); \
+  return c10::nullopt; \
+}
 c10::optional<Node*> tryMerge(
     Node* consumer,
     Node* producer,
     AliasDb& aliasDb) {
-  bool canMerge = canHandle(producer, aliasDb) &&
-      canHandle(consumer, aliasDb) &&
-      aliasDb.moveBeforeTopologicallyValid(producer, consumer);
 
-  if (!canMerge) {
-    return c10::nullopt;
-  }
+  GRAPH_DEBUG("Trying producer ", producer->kind().toQualString(), " and consumer ", consumer->kind().toQualString(), ":\n");
 
-  // Consumer is only allowed to have writers
-  if (aliasDb.hasInputWriters(consumer)) {
-    if (!aliasDb.isMutable(producer)) {
-      return c10::nullopt;
+  // Symbolic checks
+  REQ(canHandle(producer, aliasDb));
+  REQ((canHandle(consumer, aliasDb) || consumer->kind() == getTVMSymbol()));
+
+  // Alias checks
+  // Requirement:
+  // - moveAfterTopologicallyValid(consumer, producer)
+  // - One of:
+  //   1) Both are in-place ops
+  //   2) Consumer is in-place, producer !hasInputWriters
+  //   3) Producer is in-place, consumer !hasOutputWriters
+  REQ(aliasDb.moveAfterTopologicallyValid(consumer, producer));
+
+  // 1)
+  if (!(aliasDb.isMutable(consumer) && aliasDb.isMutable(producer))) {
+    // 2)
+    if (aliasDb.isMutable(consumer)) {
+      REQ(!aliasDb.hasInputWriters(producer));
+    // 3)
+    } else if (aliasDb.isMutable(producer)) {
+      REQ(!aliasDb.hasOutputWriters(consumer));
     }
-  }
-
-  if (aliasDb.hasOutputWriters(consumer)) {
-    return c10::nullopt;
   }
 
   if (!consumer->hasAttribute(attr::Subgraph) &&
       consumer->kind() != getTVMSymbol()) {
     consumer = SubgraphUtils::createSingletonSubgraph(consumer, getTVMSymbol());
   }
-  SubgraphUtils::mergeNodeIntoSubgraph(producer, consumer);
+  if (producer->kind() == prim::Constant) {
+    auto& subgraph = consumer->g(attr::Subgraph);
+    Node* in_const =
+      subgraph->createClone(producer, [](Value*) -> Value* {
+          throw std::runtime_error("unexpected input");
+          });
+    subgraph->insertNode(in_const);
+  } else {
+    SubgraphUtils::mergeNodeIntoSubgraph(producer, consumer);
+  }
 
   return consumer;
 }
+#undef REQ
 
 graph_node_list::iterator scanNode(
     Node* consumer,
