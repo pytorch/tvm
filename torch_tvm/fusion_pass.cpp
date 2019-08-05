@@ -1,9 +1,9 @@
 #include "fusion_pass.h"
 #include "operators.h"
 
+#include <torch/csrc/jit/jit_log.h>
 #include <torch/csrc/jit/passes/common_subexpression_elimination.h>
 #include <torch/csrc/jit/passes/dead_code_elimination.h>
-#include <torch/csrc/jit/jit_log.h>
 
 using namespace torch::jit;
 
@@ -43,16 +43,21 @@ bool canHandle(Block* block, AliasDb& aliasDb) {
   return true;
 }
 
-#define REQ(cond) if (!(cond)) { \
-  GRAPH_DEBUG("Failed cond "#cond"\n"); \
-  return c10::nullopt; \
-}
+#define REQ(cond)                           \
+  if (!(cond)) {                            \
+    GRAPH_DEBUG("Failed cond " #cond "\n"); \
+    return c10::nullopt;                    \
+  }
 c10::optional<Node*> tryMerge(
     Node* consumer,
     Node* producer,
     AliasDb& aliasDb) {
-
-  GRAPH_DEBUG("Trying producer ", producer->kind().toQualString(), " and consumer ", consumer->kind().toQualString(), ":\n");
+  GRAPH_DEBUG(
+      "Trying producer ",
+      producer->kind().toQualString(),
+      " and consumer ",
+      consumer->kind().toQualString(),
+      ":\n");
 
   // Symbolic checks
   REQ(canHandle(producer, aliasDb));
@@ -72,7 +77,7 @@ c10::optional<Node*> tryMerge(
     // 2)
     if (aliasDb.isMutable(consumer)) {
       REQ(!aliasDb.hasInputWriters(producer));
-    // 3)
+      // 3)
     } else if (aliasDb.isMutable(producer)) {
       REQ(!aliasDb.hasOutputWriters(consumer));
     }
@@ -84,10 +89,9 @@ c10::optional<Node*> tryMerge(
   }
   if (producer->kind() == prim::Constant) {
     auto& subgraph = consumer->g(attr::Subgraph);
-    Node* in_const =
-      subgraph->createClone(producer, [](Value*) -> Value* {
-          throw std::runtime_error("unexpected input");
-          });
+    Node* in_const = subgraph->createClone(producer, [](Value*) -> Value* {
+      throw std::runtime_error("unexpected input");
+    });
     subgraph->insertNode(in_const);
   } else {
     SubgraphUtils::mergeNodeIntoSubgraph(producer, consumer);
