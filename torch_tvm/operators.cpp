@@ -240,6 +240,8 @@ RegisterTVMOperator reg({
        ctx_.device_type = kDLCPU;
        ctx_.device_id = 0;
 
+       //TODO: Find a way to obtain type of data held by tensor.
+       //Perhaps via invoking type inferencer.
        auto val = node->input(0);
        auto pt_t = val->type()->cast<CompleteTensorType>();
        tvm::runtime::NDArray weight_temp, bias_temp;
@@ -251,10 +253,7 @@ RegisterTVMOperator reg({
          bias_temp = tvm::runtime::NDArray::Empty(shape,
              tvm_scalar_type, ctx_);
        } else {
-         weight_temp = tvm::runtime::NDArray::Empty(shape,
-             tvm::Float(32), ctx_);
-         bias_temp = tvm::runtime::NDArray::Empty(shape,
-             tvm::Float(32), ctx_);
+         TORCH_INTERNAL_ASSERT(0, "Data type of the input tensor must be available");
        }
        tvm::relay::Expr weight, bias;
        weight = tvm::relay::ConstantNode::make(weight_temp);
