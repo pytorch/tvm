@@ -4,7 +4,7 @@
 #include <relay/op/op_common.h>
 #include <relay/op/type_relations.h>
 #include <relay/pass/alter_op_layout.h>
-#include "layer_norm_attrs.h"
+#include "custom_layer_norm_attrs.h"
 
 #include <cstdint>
 

@@ -10,8 +10,6 @@
 
 #include <vector>
 
-tvm::relay::DataType scalarTypeToTVMType(at::ScalarType pt_type);
-
 struct TVMObject {
   tvm::PackedFunc kernel;
   tvm::PackedFunc set_input;

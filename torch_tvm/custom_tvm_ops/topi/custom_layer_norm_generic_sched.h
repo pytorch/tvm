@@ -1,7 +1,6 @@
 #pragma once
 
 namespace topi {
-using namespace tvm;
 
 namespace generic {
 /*!
@@ -12,9 +11,9 @@ namespace generic {
  *
  * \return A schedule for the given ops.
  */
-inline Schedule schedule_custom_layer_norm(
-    const Array<Tensor>& outs) {
-  Array<Operation> out_ops;
+inline tvm::Schedule schedule_custom_layer_norm(
+    const tvm::Array<tvm::Tensor>& outs) {
+  tvm::Array<tvm::Operation> out_ops;
   for (auto out : outs) {
     out_ops.push_back(out->op);
   }

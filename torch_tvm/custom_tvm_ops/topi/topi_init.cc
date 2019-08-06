@@ -6,7 +6,7 @@
 #include <tvm/runtime/packed_func.h>
 #include <topi/generic/injective.h>
 
-#include <custom_tvm_ops/relay/layer_norm_attrs.h>
+#include <custom_tvm_ops/relay/custom_layer_norm_attrs.h>
 
 #include "custom_layer_norm_generic_sched.h"
 #include "custom_layer_norm.h"
