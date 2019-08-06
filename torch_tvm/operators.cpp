@@ -242,19 +242,9 @@ RegisterTVMOperator reg({
 
        //TODO: Find a way to obtain type of data held by tensor.
        //Perhaps via invoking type inferencer.
-       auto val = node->input(0);
-       auto pt_t = val->type()->cast<CompleteTensorType>();
        tvm::runtime::NDArray weight_temp, bias_temp;
-       if (pt_t) {
-         auto pt_t_scalar_type = pt_t->scalarType();
-         auto tvm_scalar_type = scalarTypeToTVMType(pt_t_scalar_type);
-         weight_temp = tvm::runtime::NDArray::Empty(shape,
-             tvm_scalar_type, ctx_);
-         bias_temp = tvm::runtime::NDArray::Empty(shape,
-             tvm_scalar_type, ctx_);
-       } else {
-         TORCH_INTERNAL_ASSERT(0, "Data type of the input tensor must be available");
-       }
+       weight_temp = tvm::runtime::NDArray::Empty(shape, tvm::Float(32), ctx_);
+       bias_temp = tvm::runtime::NDArray::Empty(shape, tvm::Float(32), ctx_);
        tvm::relay::Expr weight, bias;
        weight = tvm::relay::ConstantNode::make(weight_temp);
        bias = tvm::relay::ConstantNode::make(bias_temp);
