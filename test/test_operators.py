@@ -1,5 +1,5 @@
 import unittest
-from util import TVMTest
+from test.util import TVMTest
 from torch.testing import FileCheck
 
 import torch
@@ -192,6 +192,22 @@ class TestOperators(TVMTest):
 
         ref_out, tvm_out = self.runBoth(relu, X)
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
+
+    @TVMTest.given(shape=TVMTest.rand_shape(min_rank=2, max_rank=4, min_dim=8, max_dim=32),
+        examples=20,
+        )
+    def test_max(self, shape):
+        X = torch.rand(shape)
+        axis = TVMTest.rand_int(-len(shape), len(shape)-1)()
+
+        def max_fn(a):
+            return torch.max(a + a, axis=axis)
+
+        ref_out, tvm_out = self.runBoth(max_fn, X)
+        ref_out_values, ref_out_indices = ref_out
+        tvm_out_values, tvm_out_indices = tvm_out
+        assert torch.allclose(ref_out_values, tvm_out_values, rtol=0.01, atol=0.01)
+        assert torch.allclose(ref_out_values, tvm_out_values, rtol=0.01, atol=0.01)
 
     # Known bug -- stride > 2 has mismatched padding
     @TVMTest.given(
