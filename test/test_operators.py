@@ -129,6 +129,34 @@ class TestOperators(TVMTest):
         ref_out, tvm_out = self.runBoth(batch_norm_weighted, a, b, c, d, c, b)
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
+    @TVMTest.given(shape=TVMTest.rand_shape(min_rank=2, max_rank=4, min_dim=8),\
+            examples=20)
+    def test_layer_norm(self, shape):
+        a = torch.rand(shape)
+        axis = shape[1:]
+        d = torch.rand(shape)
+
+        def layer_norm(a, d):
+            return F.layer_norm(a + d, axis)
+
+        ref_out, tvm_out = self.runBoth(layer_norm, a, d)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.05, atol=0.01)
+
+    @TVMTest.given(shape=TVMTest.rand_shape(min_rank=2, max_rank=4, min_dim=8),\
+            examples=20)
+    def test_layer_norm_weighted(self, shape):
+        a = torch.rand(shape)
+        b = torch.rand(shape[1:])
+        c = torch.rand(shape[1:])
+        axis = shape[1:]
+        d = torch.rand(shape)
+
+        def layer_norm(a, b, c, d):
+            return F.layer_norm(a + d, axis, weight=b, bias=c)
+
+        ref_out, tvm_out = self.runBoth(layer_norm, a, b, c, d)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.05, atol=0.01)
+
     @TVMTest.given(shape=TVMTest.rand_shape())
     def test_relu(self, shape):
         X = torch.rand(shape)

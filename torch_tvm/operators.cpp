@@ -9,6 +9,8 @@
 #include <torch/csrc/jit/operator_options.h>
 #include <torch/csrc/jit/passes/utils/subgraph_utils.h>
 
+#include "custom_tvm_ops/relay/custom_layer_norm_attrs.h"
+
 using namespace torch::jit;
 
 std::unordered_map<std::string, TVMScheduleFunctor>& getTVMScheduleMap() {
@@ -213,6 +215,56 @@ RegisterTVMOperator reg({
          return tvm::relay::CallNode::make(
              bias_add_op, {out, inputs[2]}, tvm::Attrs(bias_add_attrs), {});
        }
+       return out;
+     }},
+    {Symbol::fromQualString("aten::layer_norm"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) -> tvm::relay::Expr {
+       auto op = tvm::relay::Op::Get("nn.custom_layer_norm");
+       TORCH_CHECK(
+           inputs.size() == 6,
+           "layer_norm received ",
+           inputs.size(),
+           " inputs");
+       auto normalized_axis_shape = relayToArray<tvm::Integer>(inputs[1]);
+       std::vector<int64_t> shape;
+       shape.reserve(normalized_axis_shape.size());
+       for (auto& dim : normalized_axis_shape) {
+         shape.push_back(dim);
+       }
+       auto attrs = tvm::make_node<tvm::relay::CustomLayerNormAttrs>();
+       attrs->num_axis_to_normalize = normalized_axis_shape.size();
+       auto eps = static_cast<double>(relayToConstant<float>(inputs[4]));
+       attrs->eps = eps;
+
+       TVMContext ctx_;
+       ctx_.device_type = kDLCPU;
+       ctx_.device_id = 0;
+
+       //TODO: Find a way to obtain type of data held by tensor.
+       //Perhaps via invoking type inferencer.
+       tvm::runtime::NDArray weight_temp, bias_temp;
+       weight_temp = tvm::runtime::NDArray::Empty(shape, tvm::Float(32), ctx_);
+       bias_temp = tvm::runtime::NDArray::Empty(shape, tvm::Float(32), ctx_);
+       tvm::relay::Expr weight, bias;
+       weight = tvm::relay::ConstantNode::make(weight_temp);
+       bias = tvm::relay::ConstantNode::make(bias_temp);
+       if (!relayIsNone(inputs[2])) {
+         TORCH_CHECK(!relayIsNone(inputs[3]), "If weight tensor is present"
+             "then bias tensor must be present as well.");
+         attrs->affine = true;
+         weight = inputs[2];
+         bias = inputs[3];
+       }
+
+       tvm::Array<tvm::relay::Expr> ln_inputs = {
+           inputs[0],
+           weight,
+           bias,
+       };
+
+       auto out =
+           tvm::relay::CallNode::make(op, ln_inputs, tvm::Attrs(attrs), {});
+       TORCH_CHECK(node->outputs().size() == 1);
        return out;
      }},
     {Symbol::fromQualString("aten::batch_norm"),

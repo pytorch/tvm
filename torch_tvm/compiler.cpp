@@ -8,7 +8,6 @@
 
 using namespace torch::jit;
 
-
 tvm::relay::DataType scalarTypeToTVMType(at::ScalarType pt_type) {
   static const std::unordered_map<at::ScalarType, tvm::relay::DataType> type_mapping = {
     {at::ScalarType::Float, ::tvm::Float(32)},
@@ -44,7 +43,12 @@ tvm::relay::Var TVMCompiler::convertToRelay(Value* val, TVMContext ctx) {
     }
   }
   if (val->isCompleteTensor()) {
+    // Ensure if complete tensor has device type then it is CPU
+    // otherwise it is assume to be CPU.
     auto pt_t = val->type()->cast<CompleteTensorType>();
+    auto device_type = pt_t->device();
+    AT_CHECK(device_type == at::DeviceType::CPU,
+      "Expected CPU device type but got:", device_type);
     tvm::Array<tvm::relay::IndexExpr> sizes;
     for (const auto& size : pt_t->sizes()) {
       sizes.push_back(tvm::relay::IndexExpr(static_cast<int32_t>(size)));

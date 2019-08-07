@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.7)
 
 file(GLOB TORCH_TVM_SRCS
   ${CMAKE_CURRENT_SOURCE_DIR}/torch_tvm/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/torch_tvm/custom_tvm_ops/relay/*.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/torch_tvm/custom_tvm_ops/topi/*.cc
 )
 
 set(CMAKE_CXX_STANDARD 11)
@@ -32,6 +34,7 @@ target_include_directories(_torch_tvm PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/torch_tvm
     ${TVM_DIR}/include
+    ${TVM_DIR}/src
     ${TVM_DIR}/include/HalideIR
     ${TVM_DIR}/3rdparty/dmlc-core/include/
     ${TVM_DIR}/3rdparty/dlpack/include/
