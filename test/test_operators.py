@@ -1,5 +1,5 @@
 import unittest
-from test.util import TVMTest
+from util import TVMTest
 from torch.testing import FileCheck
 
 import torch
@@ -35,21 +35,28 @@ class TestOperators(TVMTest):
         assert torch.allclose(ref_out, tvm_out)
 
     @TVMTest.given(
-        shape=TVMTest.rand_shape(rank=4, min_dim=4, max_dim=4),
+        shape=TVMTest.rand_shape(min_rank=3, max_rank=4, min_dim=4, max_dim=4),
         kernel_size=TVMTest.rand_int(3, 3),
         num_kernels=TVMTest.rand_int(5, 5),
+        examples=10,
     )
     def test_conv_simple(self, shape, kernel_size, num_kernels):
         # NCHW
         X = torch.rand(shape)
-        W = torch.rand((num_kernels, shape[1], kernel_size, kernel_size))
+        if (len(shape) == 4):
+            W = torch.rand((num_kernels, shape[1], kernel_size, kernel_size))
+            conv_fn = F.conv2d
+        else:
+            # Case of 1D conv
+            W = torch.rand((num_kernels, shape[1], kernel_size))
+            conv_fn = F.conv1d
         bias = torch.rand(num_kernels)
 
         def conv(a, b):
-            return F.conv2d(a + a, b)
+            return conv_fn(a + a, b)
 
         def conv_bias(a, b, c):
-            return F.conv2d(a + a, b, c)
+            return conv_fn(a + a, b, c)
 
         ref_out, tvm_out = self.runBoth(conv, X, W)
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
@@ -57,36 +64,46 @@ class TestOperators(TVMTest):
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
     @TVMTest.given(
-        shape=TVMTest.rand_shape(rank=4, min_dim=15),
+        shape=TVMTest.rand_shape(min_rank=3, max_rank=4, min_dim=15),
         kernel_size=TVMTest.rand_int(3, 6),
         num_kernels=TVMTest.rand_int(),
         stride=TVMTest.rand_list(TVMTest.rand_int(1, 2), 2),
         padding=TVMTest.rand_list(TVMTest.rand_int(0, 4), 2),
         dilation=TVMTest.rand_list(TVMTest.rand_int(
             1, 1), 2),  # TODO known broken in TVM
+        examples=10,
     )
     def test_conv_complex(
         self, shape, kernel_size, num_kernels, stride, padding, dilation
     ):
         # NCHW
         X = torch.rand(shape)
-        W = torch.rand(num_kernels, shape[1], kernel_size, kernel_size)
+        if (len(shape) == 4):
+            W = torch.rand(num_kernels, shape[1], kernel_size, kernel_size)
+            conv_fn = F.conv2d
+        else:
+            W = torch.rand(num_kernels, shape[1], kernel_size)
+            conv_fn = F.conv1d
+            stride = [stride[0]]
+            padding = [padding[0]]
+            dilation = [dilation[0]]
 
         def conv(a, b):
-            return F.conv2d(a + a, b, stride=stride, padding=padding, dilation=dilation)
+            return conv_fn(a + a, b, stride=stride, padding=padding, dilation=dilation)
 
         ref_out, tvm_out = self.runBoth(conv, X, W)
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
     @TVMTest.given(
-        shape=TVMTest.rand_shape(rank=3, min_dim=15),
+        shape=TVMTest.rand_shape(min_rank=3, max_rank=4, min_dim=15),
         kernel_size=TVMTest.rand_int(3, 8),
         stride=TVMTest.rand_list(TVMTest.rand_int(1, 2), 2),
         padding=TVMTest.rand_list(TVMTest.rand_int(0, 4), 2),
         dilation=TVMTest.rand_list(TVMTest.rand_int(1, 2), 2),
         groups=TVMTest.rand_int(4, 8),
         in_ch_per_group=TVMTest.rand_int(1, 4),
-        out_ch_per_group=TVMTest.rand_int(1, 8)
+        out_ch_per_group=TVMTest.rand_int(1, 8),
+        examples=10,
     )
     def test_group_conv(
         self, shape, kernel_size, stride, padding, dilation, groups, in_ch_per_group, out_ch_per_group
@@ -94,11 +111,20 @@ class TestOperators(TVMTest):
         # NCHW
         in_channels = in_ch_per_group * groups
         out_channels = out_ch_per_group * groups
-        X = torch.rand(shape[0], in_channels, shape[1], shape[2])
-        W = torch.rand(out_channels, in_ch_per_group, kernel_size, kernel_size)
+        if (len(shape) == 4):
+            X = torch.rand(shape[0], in_channels, shape[1], shape[2])
+            W = torch.rand(out_channels, in_ch_per_group, kernel_size, kernel_size)
+            conv_fn = F.conv2d
+        else:
+            X = torch.rand(shape[0], in_channels, shape[1])
+            W = torch.rand(out_channels, in_ch_per_group, kernel_size)
+            conv_fn = F.conv1d
+            stride = [stride[0]]
+            padding = [padding[0]]
+            dilation = [dilation[0]]
 
         def conv(a, b):
-            return F.conv2d(a + a, b, stride=stride, padding=padding, dilation=dilation, groups=groups)
+            return conv_fn(a + a, b, stride=stride, padding=padding, dilation=dilation, groups=groups)
 
         ref_out, tvm_out = self.runBoth(conv, X, W)
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
