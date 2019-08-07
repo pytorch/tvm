@@ -2,8 +2,7 @@
 
 namespace topi {
 namespace generic {
-tvm::Schedule schedule_custom_layer_norm(
-    const tvm::Array<tvm::Tensor>& outs) {
+tvm::Schedule schedule_custom_layer_norm(const tvm::Array<tvm::Tensor>& outs) {
   tvm::Array<tvm::Operation> out_ops;
   for (auto out : outs) {
     out_ops.push_back(out->op);

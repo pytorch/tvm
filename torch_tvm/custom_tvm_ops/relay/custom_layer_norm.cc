@@ -1,21 +1,25 @@
-#include <tvm/expr.h>
-#include <tvm/operation.h>
-#include <tvm/relay/op.h>
 #include <relay/op/op_common.h>
 #include <relay/op/type_relations.h>
 #include <relay/pass/alter_op_layout.h>
+#include <tvm/expr.h>
+#include <tvm/operation.h>
+#include <tvm/relay/op.h>
 
-#include "custom_layer_norm_attrs.h"
 #include "custom_layer_norm.h"
+#include "custom_layer_norm_attrs.h"
 
 namespace tvm {
 namespace relay {
 
-Expr MakeCustomLayerNorm(Expr data, Expr gamma, Expr beta,
+Expr MakeCustomLayerNorm(
+    Expr data,
+    Expr gamma,
+    Expr beta,
     const int num_axis_to_normalize,
-    const bool affine, const double eps) {
+    const bool affine,
+    const double eps) {
   auto attrs = make_node<CustomLayerNormAttrs>();
-  attrs->num_axis_to_normalize= num_axis_to_normalize;
+  attrs->num_axis_to_normalize = num_axis_to_normalize;
   attrs->affine = affine;
   static const Op& op = Op::Get("nn.custom_layer_norm");
   return CallNode::make(op, {data, gamma, beta}, Attrs(attrs), {});
@@ -45,8 +49,8 @@ bool CustomLayerNormRel(
 
   auto layer_norm_attrs_ptr = attrs.as<CustomLayerNormAttrs>();
   auto num_axis_to_normalize = layer_norm_attrs_ptr->num_axis_to_normalize;
-  CHECK_GT(num_axis_to_normalize , 0);
-  CHECK_LT(num_axis_to_normalize , data->shape.size());
+  CHECK_GT(num_axis_to_normalize, 0);
+  CHECK_LT(num_axis_to_normalize, data->shape.size());
 
   const auto* gamma = types[1].as<TensorTypeNode>();
   const auto* beta = types[2].as<TensorTypeNode>();
@@ -55,9 +59,11 @@ bool CustomLayerNormRel(
     CHECK_EQ(beta->shape.size(), num_axis_to_normalize);
     for (int64_t i = 0; i < num_axis_to_normalize; ++i) {
       int64_t data_index = i + (data_size - num_axis_to_normalize);
-      CHECK_EQ(*as_const_int(data->shape[data_index]),
+      CHECK_EQ(
+          *as_const_int(data->shape[data_index]),
           *as_const_int(gamma->shape[i]));
-      CHECK_EQ(*as_const_int(data->shape[data_index]),
+      CHECK_EQ(
+          *as_const_int(data->shape[data_index]),
           *as_const_int(beta->shape[i]));
     }
   }
