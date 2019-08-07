@@ -148,6 +148,25 @@ tvm::relay::Function TVMCompiler::convertToRelay(
       auto uses = value->uses();
       for (const auto& use : uses) {
         tvm::Array<tvm::relay::Expr> relay_inputs;
+        if (use.user->outputs().size() == 1) {
+          if (value_map.count(use.user->output())) {
+            continue;
+          }
+        } else {
+          bool node_already_inserted{false};
+          for (const auto& output : use.user->outputs()) {
+            if (value_map.count(output)) {
+              node_already_inserted = true;
+            } else {
+              // If one output node is created then all must have
+              // been created.
+              AT_CHECK(!node_already_inserted);
+            }
+          }
+          if (node_already_inserted) {
+            continue;
+          }
+        }
         auto skip_user = false;
         for (const auto& input : use.user->inputs()) {
           if (value_map.find(input) == value_map.end()) {
