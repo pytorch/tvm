@@ -1,8 +1,5 @@
-#include "operators.h"
 #include <tvm/relay/attrs/nn.h>
 #include <tvm/relay/attrs/transform.h>
-#include "compiler.h"
-#include "fusion_pass.h" // tvm_sym
 
 #include <torch/csrc/autograd/record_function.h>
 #include <torch/csrc/jit/custom_operator.h>
@@ -10,6 +7,9 @@
 #include <torch/csrc/jit/passes/utils/subgraph_utils.h>
 
 #include "custom_tvm_ops/relay/custom_layer_norm_attrs.h"
+#include "compiler.h"
+#include "fusion_pass.h" // tvm_sym
+#include "operators.h"
 
 using namespace torch::jit;
 
@@ -98,6 +98,9 @@ T relayToConstant(tvm::relay::Expr e) {
   auto c = e.as<tvm::relay::ConstantNode>();
   TORCH_INTERNAL_ASSERT(c);
   TORCH_INTERNAL_ASSERT(c->is_scalar());
+  // TODO: Better error handling on checking if T is same as
+  // c->data->dtype. Unfortunately DLDataType is enum of
+  // int, uint and float.
   return static_cast<T*>(c->data->data)[0];
 }
 
@@ -115,6 +118,23 @@ bool relayIsNone(tvm::relay::Expr e) {
 
 uint64_t getNoneSentinel() {
   return 0xe4fa3adecabcf036;
+}
+
+tvm::relay::Call insertDims(const tvm::relay::Expr& in, int64_t input_dims,
+    int64_t num_dims_to_add) {
+  auto expand_dims = tvm::relay::Op::Get("expand_dims");
+  auto attrs = tvm::make_node<tvm::relay::ExpandDimsAttrs>();
+  attrs->axis = input_dims;
+  attrs->num_newaxis = num_dims_to_add;
+  return tvm::relay::CallNode::make(expand_dims, {in}, tvm::Attrs(attrs), {});
+}
+
+tvm::relay::Call squeezeSingleDim(const tvm::relay::Expr& in,
+    int32_t dim_to_squeeze) {
+  auto squeeze = tvm::relay::Op::Get("squeeze");
+  auto attrs = tvm::make_node<tvm::relay::SqueezeAttrs>();
+  attrs->axis = {dim_to_squeeze};
+  return tvm::relay::CallNode::make(squeeze, {in}, tvm::Attrs(attrs), {});
 }
 
 template <typename T>
@@ -151,6 +171,20 @@ RegisterTVMOperator reg({
        auto out = tvm::relay::CallNode::make(op, add_inputs, tvm::Attrs(), {});
        return out;
      }},
+    {Symbol::fromQualString("aten::max"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       TORCH_INTERNAL_ASSERT(inputs.size() == 3);
+       auto make_func_ptr = tvm::runtime::Registry::Get("relay.op._make.max");
+       auto make_func = *make_func_ptr;
+       auto axis = relayToConstant<int>(inputs[1]);
+       auto keepdims = relayToConstant<bool>(inputs[2]);
+       tvm::Array<tvm::Integer> axis_arr({tvm::Integer(axis)});
+       auto max_values = make_func(inputs[0], axis_arr, keepdims, false);
+       make_func_ptr = tvm::runtime::Registry::Get("relay.op._make.argmax");
+       make_func = *make_func_ptr;
+       auto max_indices= make_func(inputs[0], axis_arr, keepdims, false);
+       return tvm::relay::Expr(tvm::relay::TupleNode::make({max_values, max_indices}));
+     }},
     {Symbol::fromQualString("aten::add_"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("add");
@@ -183,9 +217,15 @@ RegisterTVMOperator reg({
        conv_attrs->groups = relayToConstant<int>(inputs[8]);
        conv_attrs->data_layout = "NCHW";
        conv_attrs->kernel_layout = "OIHW";
+       conv_attrs->strides = relayToArray<tvm::relay::IndexExpr>(inputs[3]);
+       conv_attrs->padding = relayToArray<tvm::relay::IndexExpr>(inputs[4]);
+       conv_attrs->dilation = relayToArray<tvm::relay::IndexExpr>(inputs[5]);
 
        conv_attrs->kernel_size =
            tvm::NullValue<tvm::Array<tvm::relay::IndexExpr>>();
+       // For 1D conv need to expand dim. That means it has to be removed
+       // as well.
+       bool dim_added{false}; // For 1D conv need to expand dim.
        // If the input was a complete tensor type than we have information to
        // populate the kernel
        if (const tvm::relay::VarNode* var =
@@ -193,17 +233,44 @@ RegisterTVMOperator reg({
          auto* w_t = var->type_annotation.as<tvm::relay::TensorTypeNode>();
          TORCH_INTERNAL_ASSERT(w_t);
          auto shape = w_t->shape;
-         tvm::Array<tvm::relay::IndexExpr> w_sizes = {shape[2], shape[3]};
+         auto num_dims = shape.size();
+         tvm::Array<tvm::relay::IndexExpr> w_sizes;
+         if (num_dims < 4) {
+           AT_CHECK(num_dims == 3,
+               "Expected number of min dims for convolution is 3, found:",
+               num_dims);
+           AT_CHECK(conv_attrs->strides.size() == 1,
+               "Expected strides size for 1D conv is 1, found:",
+               conv_attrs->strides.size());
+           AT_CHECK(conv_attrs->padding.size() == 1,
+               "Expected strides size for 1D conv is 1, found:",
+               conv_attrs->padding.size());
+           AT_CHECK(conv_attrs->dilation.size() == 1,
+               "Expected strides size for 1D conv is 1, found:",
+               conv_attrs->dilation.size());
+           new_inputs.Set(0, insertDims(inputs[0], num_dims, 1));
+           new_inputs.Set(1, insertDims(inputs[1], num_dims, 1));
+           w_sizes = {shape[2], tvm::relay::IndexExpr(1)};
+           conv_attrs->strides.push_back(tvm::relay::IndexExpr(1));
+           conv_attrs->padding.push_back(tvm::relay::IndexExpr(0));
+           conv_attrs->dilation.push_back(tvm::relay::IndexExpr(1));
+           dim_added = true;
+         }
+         else {
+           w_sizes = {shape[2], shape[3]};
+         }
          conv_attrs->kernel_size = w_sizes;
        }
-
-       conv_attrs->strides = relayToArray<tvm::relay::IndexExpr>(inputs[3]);
-       conv_attrs->padding = relayToArray<tvm::relay::IndexExpr>(inputs[4]);
-       conv_attrs->dilation = relayToArray<tvm::relay::IndexExpr>(inputs[5]);
+       else {
+         TORCH_INTERNAL_ASSERT(0, "Kernel information must be available.")
+       }
 
        auto out = tvm::relay::CallNode::make(
            op, new_inputs, tvm::Attrs(conv_attrs), {});
 
+       if (dim_added) {
+         out = squeezeSingleDim(out, -1);
+       }
        // Check if bias node is a var or constant (denoting a None currently),
        // if bias is present, emit an additional bias_add node.
        // TODO: better check when relay has None type
