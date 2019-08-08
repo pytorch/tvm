@@ -329,6 +329,24 @@ class TestOperators(TVMTest):
     @TVMTest.given(
         shape=TVMTest.rand_shape(rank=2, min_dim=4),
     )
+    def test_concat(self, shape):
+        input1 = torch.rand(shape)
+        input2 = torch.rand(shape)
+        # import pdb
+        # pdb.set_trace()
+        def concat(x1, x2):
+            return torch.cat((x1, x2), 0)
+
+        import torch_tvm
+        torch_tvm.enable()
+        # test concat
+        scripted_concat = torch.jit.script(concat)
+        concat_graph = scripted_concat.graph_for(input1, input2)
+        FileCheck().check("prim::FusedConcat").check_not("prim::ListConstruct").check_not("aten::cat").run(str(concat_graph))
+
+    @TVMTest.given(
+        shape=TVMTest.rand_shape(rank=2, min_dim=4),
+    )
     def test_reshape(self, shape):
         input = torch.rand(shape)
 

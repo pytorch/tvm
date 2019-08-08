@@ -291,6 +291,16 @@ RegisterTVMOperator reg({
        return out;
      },
      "", PARAM_INDICES(convolution)},
+     }},
+    {Symbol::fromQualString("prim::FusedConcat"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       auto op = tvm::relay::Op::Get("concatenate");
+       auto concat_inputs = tvm::relay::TupleNode::make(inputs);
+       auto attrs = tvm::make_node<tvm::relay::ConcatenateAttrs>();
+       attrs->axis = node->i(attr::dim);
+       auto out = tvm::relay::CallNode::make(op, {concat_inputs}, tvm::Attrs(attrs), {});
+       return out;
+     }},
     {Symbol::fromQualString("aten::layer_norm"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) -> tvm::relay::Expr {
        auto op = tvm::relay::Op::Get("nn.custom_layer_norm");

@@ -7,6 +7,7 @@
 
 #include "compiler.h"
 #include "fuse_linear.h"
+#include "fuse_concat.h"
 #include "fusion_pass.h"
 
 namespace py = pybind11;
@@ -48,6 +49,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
   RegisterPass pass([](std::shared_ptr<Graph>& g) {
     if (fusion_enabled) {
       FuseLinear(g);
+      FuseConcat(g);
       FuseSupportedOps(g);
     }
   });
