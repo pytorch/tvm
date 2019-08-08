@@ -120,7 +120,7 @@ uint64_t getNoneSentinel() {
   return 0xe4fa3adecabcf036;
 }
 
-tvm::relay::Expr insertDims(const tvm::relay::Expr& in, int64_t input_dims,
+tvm::relay::Call insertDims(const tvm::relay::Expr& in, int64_t input_dims,
     int64_t num_dims_to_add) {
   auto expand_dims = tvm::relay::Op::Get("expand_dims");
   auto attrs = tvm::make_node<tvm::relay::ExpandDimsAttrs>();
@@ -129,7 +129,7 @@ tvm::relay::Expr insertDims(const tvm::relay::Expr& in, int64_t input_dims,
   return tvm::relay::CallNode::make(expand_dims, {in}, tvm::Attrs(attrs), {});
 }
 
-tvm::relay::Expr squeezeSingleDim(const tvm::relay::Expr& in,
+tvm::relay::Call squeezeSingleDim(const tvm::relay::Expr& in,
     int32_t dim_to_squeeze) {
   auto squeeze = tvm::relay::Op::Get("squeeze");
   auto attrs = tvm::make_node<tvm::relay::SqueezeAttrs>();
@@ -265,7 +265,7 @@ RegisterTVMOperator reg({
          TORCH_INTERNAL_ASSERT(0, "Kernel information must be available.")
        }
 
-       tvm::relay::Expr out = tvm::relay::CallNode::make(
+       auto out = tvm::relay::CallNode::make(
            op, new_inputs, tvm::Attrs(conv_attrs), {});
 
        if (dim_added) {
@@ -279,8 +279,8 @@ RegisterTVMOperator reg({
          auto bias_add_op = tvm::relay::Op::Get("nn.bias_add");
          auto bias_add_attrs = tvm::make_node<tvm::relay::BiasAddAttrs>();
          bias_add_attrs->axis = 1;
-         return tvm::relay::Expr(tvm::relay::CallNode::make(
-             bias_add_op, {out, inputs[2]}, tvm::Attrs(bias_add_attrs), {}));
+         return tvm::relay::CallNode::make(
+             bias_add_op, {out, inputs[2]}, tvm::Attrs(bias_add_attrs), {});
        }
        return out;
      }},
