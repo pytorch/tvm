@@ -149,6 +149,10 @@ tvm::relay::Function TVMCompiler::convertToRelay(
       for (const auto& use : uses) {
         tvm::Array<tvm::relay::Expr> relay_inputs;
         auto skip_user = false;
+        if (std::any_of(use.user->outputs().begin(), use.user->outputs().end(),
+              [&value_map](Value* const output){return value_map.count(output);})) {
+          continue;
+        }
         for (const auto& input : use.user->inputs()) {
           if (value_map.find(input) == value_map.end()) {
             // We may be dealing with a constant, handle that here
