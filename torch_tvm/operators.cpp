@@ -539,6 +539,15 @@ RegisterTVMOperator reg({
          { inputs[0] },
          tvm::Attrs(softmax_attrs));
      }},
+     {Symbol::fromQualString("aten::dropout"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       TORCH_CHECK(inputs.size() == 3, "Expected number of inputs 3, got ",
+           inputs.size());
+       auto train = relayToConstant<bool>(inputs[2]);
+       TORCH_CHECK(!train, "Only inference mode dropout is supported"
+           " in torch tvm");
+       return inputs[0];
+     }},
 });
 
 bool isSupported(Node* node) {
