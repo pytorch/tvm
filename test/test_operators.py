@@ -306,12 +306,12 @@ class TestOperators(TVMTest):
 
 
     @TVMTest.given(
-        shape=TVMTest.rand_shape(rank=2, min_dim=4),
+        shape=TVMTest.rand_shape(min_rank=2, max_rank=4, min_dim=4),
         out_features=TVMTest.rand_int(3, 6),
     )
     def test_linear(self, shape, out_features):
         input = torch.rand(shape)
-        weight = torch.rand(out_features, shape[1])
+        weight = torch.rand(out_features, shape[-1])
         bias = torch.rand(out_features)
 
         def linear(input, weight, bias):
