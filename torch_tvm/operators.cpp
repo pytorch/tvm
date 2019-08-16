@@ -6,7 +6,7 @@
 #include <torch/csrc/jit/operator_options.h>
 #include <torch/csrc/jit/passes/utils/subgraph_utils.h>
 
-#include "custom_tvm_ops/relay/custom_layer_norm_attrs.h"
+#include "custom_tvm_ops/cpp/relay/custom_layer_norm_attrs.h"
 #include "compiler.h"
 #include "fusion_pass.h" // tvm_sym
 #include "operators.h"

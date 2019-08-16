@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.7)
 
 file(GLOB TORCH_TVM_SRCS
   ${CMAKE_CURRENT_SOURCE_DIR}/torch_tvm/*.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/torch_tvm/custom_tvm_ops/relay/*.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/torch_tvm/custom_tvm_ops/topi/*.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/torch_tvm/custom_tvm_ops/cpp/relay/*.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/torch_tvm/custom_tvm_ops/cpp/topi/*.cc
 )
 
 set(CMAKE_CXX_STANDARD 11)

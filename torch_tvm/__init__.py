@@ -5,7 +5,7 @@ from __future__ import unicode_literals
 
 import torch
 from tvm import relay # This registers all the schedules
-from torch_tvm.custom_tvm_ops.python import custom_dense
+from torch_tvm.custom_tvm_ops import custom_dense
 
 from ._torch_tvm import *
 from ._torch_tvm import _push_relay_expr

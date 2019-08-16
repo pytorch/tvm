@@ -3,9 +3,7 @@ from tvm import autotvm
 import topi
 from topi import nn
 from topi.util import get_const_tuple
-from topi.x86.dense import _declaration_dense_reshape, \
-        _declaration_dense_nopack_reshape, \
-        _declaration_dense_nopack, \
+from topi.x86.dense import _declaration_dense_nopack, \
         _declaration_dense_pack, \
         _default_dense_nopack_config
 
@@ -16,7 +14,7 @@ def declare_customized_dense(cfg, data, weight, bias=None, out_dtype=None):
     elif len(data.shape) > 2:
         batch = get_const_tuple(data.shape)[0]
         pack_weights = (batch > 16)
-        return _declaration_dense_reshape(cfg, data, weight, \
+        return _declaration_custom_dense(cfg, data, weight, \
                 bias, out_dtype, pack_weights)
 
     # For small batch sizes, don't pack weight into cache-friendly layout
@@ -27,7 +25,7 @@ def declare_customized_dense(cfg, data, weight, bias=None, out_dtype=None):
     return _declaration_dense_pack(cfg, data, weight, bias, out_dtype)
 
 @autotvm.register_topi_compute(nn.dense, "cpu", "custom_direct_reshape")
-def _declaration_dense_reshape(cfg, data, weight, bias=None, out_dtype=None, pack_weights=True):
+def _declaration_custom_dense(cfg, data, weight, bias=None, out_dtype=None, pack_weights=True):
     if out_dtype is None:
         out_dtype = data.dtype
     total_size = 1

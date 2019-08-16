@@ -6,7 +6,7 @@
 #include <tvm/relay/op_attr_types.h>
 #include <tvm/runtime/packed_func.h>
 
-#include <custom_tvm_ops/relay/custom_layer_norm_attrs.h>
+#include <custom_tvm_ops/cpp/relay/custom_layer_norm_attrs.h>
 
 #include "custom_layer_norm.h"
 #include "custom_layer_norm_generic_sched.h"
