@@ -505,15 +505,6 @@ RegisterTVMOperator reg({
      }},
     {Symbol::fromQualString("aten::linear"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
-       Value* input = node->input(0);
-       auto d_tensor = input->type()->cast<ProfiledTensorType>();
-       if (d_tensor) {
-         auto optional_n_dim = d_tensor->dim();
-         TORCH_INTERNAL_ASSERT(optional_n_dim);
-         int64_t n_dim = optional_n_dim.value();
-         TORCH_CHECK(n_dim == 2,
-                     "WARNING: relay does not support dense operation on inputs more than 2 dim");
-       }
        auto dense_attrs = tvm::make_node<tvm::relay::DenseAttrs>();
        auto out = tvm::relay::CallNode::make(
            tvm::relay::Op::Get("nn.dense"),
@@ -524,7 +515,7 @@ RegisterTVMOperator reg({
        if (!relayIsNone(inputs[2])) {
          auto bias_add_op = tvm::relay::Op::Get("nn.bias_add");
          auto bias_add_attrs = tvm::make_node<tvm::relay::BiasAddAttrs>();
-         bias_add_attrs->axis = 1;
+         bias_add_attrs->axis = -1;
          return tvm::relay::CallNode::make(
              bias_add_op, {out, inputs[2]}, tvm::Attrs(bias_add_attrs), {});
        }
