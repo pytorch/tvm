@@ -7,15 +7,12 @@ from topi.x86.dense import _declaration_dense_nopack, \
         _declaration_dense_pack, \
         _default_dense_nopack_config
 
-@autotvm.register_topi_compute(nn.dense, "cpu", "direct", override=True)
 def declare_customized_dense(cfg, data, weight, bias=None, out_dtype=None):
     if len(data.shape) == 2:
         batch, _ = get_const_tuple(data.shape)
     elif len(data.shape) > 2:
-        batch = get_const_tuple(data.shape)[0]
-        pack_weights = (batch > 16)
         return _declaration_custom_dense(cfg, data, weight, \
-                bias, out_dtype, pack_weights)
+                bias, out_dtype)
 
     # For small batch sizes, don't pack weight into cache-friendly layout
     # because of overhead in packing and limited reuse from batch dimension
@@ -25,7 +22,12 @@ def declare_customized_dense(cfg, data, weight, bias=None, out_dtype=None):
     return _declaration_dense_pack(cfg, data, weight, bias, out_dtype)
 
 @autotvm.register_topi_compute(nn.dense, "cpu", "custom_direct_reshape")
-def _declaration_custom_dense(cfg, data, weight, bias=None, out_dtype=None, pack_weights=True):
+def _declaration_custom_dense(cfg, data, weight, bias=None, out_dtype=None):
+    # Only supports 3 dim data with 2 dim weight
+    assert (len(data.shape)==3 and len(weight.shape)==2), \
+            "Required dims for data=3 and weight=2."
+    batch = get_const_tuple(data.shape)[0]
+    pack_weights = (batch > 16)
     if out_dtype is None:
         out_dtype = data.dtype
     total_size = 1
