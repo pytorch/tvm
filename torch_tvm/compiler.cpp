@@ -98,8 +98,6 @@ tvm::relay::Expr TVMCompiler::convertToRelay(
   if (val.isInt()) {
     auto x = tvm::runtime::NDArray::Empty({}, tvm::Int(64), ctx);
     auto l = val.toInt();
-    TORCH_CHECK(l <= std::numeric_limits<int64_t>::max());
-    TORCH_CHECK(l >= std::numeric_limits<int64_t>::lowest());
     reinterpret_cast<int64_t*>(x->data)[0] = l;
     auto v = tvm::relay::ConstantNode::make(x);
     return v;
@@ -124,8 +122,6 @@ tvm::relay::Expr TVMCompiler::convertToRelay(
     tvm::Array<tvm::relay::Expr> tuple_elems;
     for (const auto& elem : val.toIntList()) {
       auto x = tvm::runtime::NDArray::Empty({}, tvm::Int(64), ctx);
-      TORCH_CHECK(elem <= std::numeric_limits<int64_t>::max());
-      TORCH_CHECK(elem >= std::numeric_limits<int64_t>::lowest());
       reinterpret_cast<int64_t*>(x->data)[0] = elem;
       auto v = tvm::relay::ConstantNode::make(x);
       tuple_elems.push_back(v);
