@@ -32,6 +32,7 @@ tvm::relay::Var TVMCompiler::convertToRelay(Value* val, TVMContext ctx) {
   auto optional_ivalue = toIValue(val);
   if (optional_ivalue.has_value()) {
     if (optional_ivalue.value().isTensor()) {
+      auto t = optional_ivalue.value().toTensor();
       val->inferTypeFrom(optional_ivalue.value().toTensor());
     } else {
       auto expr = convertToRelay(optional_ivalue.value(), ctx)
@@ -45,15 +46,23 @@ tvm::relay::Var TVMCompiler::convertToRelay(Value* val, TVMContext ctx) {
   if (val->isCompleteTensor()) {
     // Ensure if complete tensor has device type then it is CPU
     // otherwise it is assume to be CPU.
-    auto pt_t = val->type()->cast<CompleteTensorType>();
-    auto device_type = pt_t->device();
+    auto pt_t = val->type()->cast<ProfiledTensorType>();
+    TORCH_INTERNAL_ASSERT(pt_t);
+    auto optional_device_type = pt_t->device();
+    TORCH_INTERNAL_ASSERT(optional_device_type);
+    auto device_type = optional_device_type.value();
     AT_CHECK(device_type == at::DeviceType::CPU,
       "Expected CPU device type but got:", device_type);
     tvm::Array<tvm::relay::IndexExpr> sizes;
-    for (const auto& size : pt_t->sizes()) {
-      sizes.push_back(tvm::relay::IndexExpr(static_cast<int32_t>(size)));
+    const auto& varying_sizes = pt_t->sizes();
+    for (const auto& optional_size : varying_sizes.sizes()) {
+      TORCH_INTERNAL_ASSERT(optional_size);
+      sizes.push_back(tvm::relay::IndexExpr(
+            static_cast<int32_t>(optional_size.value())));
     }
-    at::ScalarType pt_type = pt_t->scalarType();
+    auto optional_dtype = pt_t->scalarType();
+    TORCH_INTERNAL_ASSERT(optional_dtype);
+    at::ScalarType pt_type = optional_dtype.value();
     auto t = tvm::relay::TensorTypeNode::make(sizes, scalarTypeToTVMType(pt_type));
     auto v = tvm::relay::VarNode::make(
         val->debugName() +
