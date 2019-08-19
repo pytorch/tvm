@@ -506,9 +506,11 @@ RegisterTVMOperator reg({
     {Symbol::fromQualString("aten::linear"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        Value* input = node->input(0);
-       auto d_tensor = input->type()->cast<DimensionedTensorType>();
+       auto d_tensor = input->type()->cast<ProfiledTensorType>();
        if (d_tensor) {
-         int64_t n_dim = d_tensor->dim();
+         auto optional_n_dim = d_tensor->dim();
+         TORCH_INTERNAL_ASSERT(optional_n_dim);
+         int64_t n_dim = optional_n_dim.value();
          TORCH_CHECK(n_dim == 2,
                      "WARNING: relay does not support dense operation on inputs more than 2 dim");
        }
