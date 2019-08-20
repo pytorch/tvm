@@ -29,6 +29,8 @@ jobs:
           command: |
             source env/bin/activate
 
+            git fetch origin master:upstream
+            git rebase upstream
             git submodule sync --recursive
             git submodule update --init --recursive
 
