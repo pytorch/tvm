@@ -506,7 +506,7 @@ RegisterTVMOperator reg({
     {Symbol::fromQualString("aten::linear"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        Value* input = node->input(0);
-       auto d_tensor = input->type()->cast<ProfiledTensorType>();
+       auto d_tensor = input->type()->cast<TensorType>();
        if (d_tensor) {
          auto optional_n_dim = d_tensor->dim();
          TORCH_INTERNAL_ASSERT(optional_n_dim);

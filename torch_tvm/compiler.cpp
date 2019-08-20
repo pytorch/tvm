@@ -46,7 +46,7 @@ tvm::relay::Var TVMCompiler::convertToRelay(Value* val, TVMContext ctx) {
   if (val->isCompleteTensor()) {
     // Ensure if complete tensor has device type then it is CPU
     // otherwise it is assume to be CPU.
-    auto pt_t = val->type()->cast<ProfiledTensorType>();
+    auto pt_t = val->type()->cast<TensorType>();
     TORCH_INTERNAL_ASSERT(pt_t);
     auto optional_device_type = pt_t->device();
     TORCH_INTERNAL_ASSERT(optional_device_type);
