@@ -55,7 +55,10 @@ tvm::relay::Var TVMCompiler::convertToRelay(Value* val, TVMContext ctx) {
       "Expected CPU device type but got:", device_type);
     tvm::Array<tvm::relay::IndexExpr> sizes;
     const auto& varying_sizes = pt_t->sizes();
-    for (const auto& optional_size : varying_sizes.sizes()) {
+    const auto& optional_sizes = varying_sizes.sizes();
+    TORCH_INTERNAL_ASSERT(optional_sizes);
+    const auto& pt_sizes = optional_sizes.value();
+    for (const auto& optional_size : pt_sizes) {
       TORCH_INTERNAL_ASSERT(optional_size);
       sizes.push_back(tvm::relay::IndexExpr(
             static_cast<int32_t>(optional_size.value())));
