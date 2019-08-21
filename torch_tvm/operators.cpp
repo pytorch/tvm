@@ -53,7 +53,7 @@ RegisterTVMOperator::RegisterTVMOperator(std::vector<TVMOpMap> ops) {
         // NB: We assume all relay ops are pure
         auto options = c10::OperatorOptions();
         options.setAliasAnalysis(AliasAnalysisKind::PURE);
-	// TODO: Pass in operator options somehow
+	      // TODO: Pass in operator options somehow
         auto torch_operator = Operator(
             FunctionSchema(
                 "tvm::" + op.name,
@@ -237,16 +237,16 @@ RegisterTVMOperator reg({
          tvm::Array<tvm::relay::IndexExpr> w_sizes;
          if (num_dims < 4) {
            AT_CHECK(num_dims == 3,
-               "Expected number of min dims for convolution is 3, found:",
+               "Expected number of min dims for convolution is 3, found:i ",
                num_dims);
            AT_CHECK(conv_attrs->strides.size() == 1,
-               "Expected strides size for 1D conv is 1, found:",
+               "Expected strides size for 1D conv is 1, found: ",
                conv_attrs->strides.size());
            AT_CHECK(conv_attrs->padding.size() == 1,
-               "Expected strides size for 1D conv is 1, found:",
+               "Expected strides size for 1D conv is 1, found: ",
                conv_attrs->padding.size());
            AT_CHECK(conv_attrs->dilation.size() == 1,
-               "Expected strides size for 1D conv is 1, found:",
+               "Expected strides size for 1D conv is 1, found: ",
                conv_attrs->dilation.size());
            new_inputs.Set(0, insertDims(inputs[0], num_dims, 1));
            new_inputs.Set(1, insertDims(inputs[1], num_dims, 1));
@@ -416,16 +416,16 @@ RegisterTVMOperator reg({
        TORCH_CHECK(!relayIsNone(inputs[2]));
        auto d = relayToConstant<float>(inputs[1]);
        TORCH_CHECK(
-           d < 1e-7, "aten::threshold_ only supported for threshold 0, got", d);
+           d < 1e-7, "aten::threshold_ only supported for threshold 0, got ", d);
        TORCH_CHECK(
            d > -1e-7,
            "aten::threshold_ only supported for threshold 0, got",
            d);
        d = relayToConstant<float>(inputs[2]);
        TORCH_CHECK(
-           d < 1e-7, "aten::threshold_ only supported for value 0, got", d);
+           d < 1e-7, "aten::threshold_ only supported for value 0, got ", d);
        TORCH_CHECK(
-           d > -1e-7, "aten::threshold_ only supported for value 0, got", d);
+           d > -1e-7, "aten::threshold_ only supported for value 0, got ", d);
        auto op = tvm::relay::Op::Get("nn.relu");
        auto out = tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(), {});
        return out;
