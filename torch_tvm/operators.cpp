@@ -23,12 +23,18 @@ std::unordered_map<Symbol, TVMOpFunctor>& getTVMOperatorMap() {
   return map;
 }
 
+std::unordered_map<Symbol, std::vector<int32_t>>& getOpParamsMap() {
+  static std::unordered_map<Symbol, std::vector<int32_t>> param_map;
+  return param_map;
+}
+
 // These "wrapper" graphs are used to store the subgraphs
 // that will be compiled during execution.
 static std::list<Graph> wrapper_graphs;
 RegisterTVMOperator::RegisterTVMOperator(std::vector<TVMOpMap> ops) {
   for (const auto& op : ops) {
     getTVMOperatorMap()[op.sym] = op.fn;
+    getOpParamsMap()[op.sym] = op.param_indices;
 
     if (op.name != "") {
       auto torch_ops = getAllOperatorsFor(op.sym);
@@ -283,7 +289,8 @@ RegisterTVMOperator reg({
              bias_add_op, {out, inputs[2]}, tvm::Attrs(bias_add_attrs), {});
        }
        return out;
-     }},
+     },
+     "", PARAM_INDICES(convolution)},
     {Symbol::fromQualString("aten::layer_norm"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) -> tvm::relay::Expr {
        auto op = tvm::relay::Op::Get("nn.custom_layer_norm");
@@ -333,7 +340,8 @@ RegisterTVMOperator reg({
            tvm::relay::CallNode::make(op, ln_inputs, tvm::Attrs(attrs), {});
        TORCH_CHECK(node->outputs().size() == 1);
        return out;
-     }},
+     },
+     "", PARAM_INDICES(layer_norm)},
     {Symbol::fromQualString("aten::batch_norm"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) -> tvm::relay::Expr {
        auto op = tvm::relay::Op::Get("nn.batch_norm");
@@ -529,7 +537,8 @@ RegisterTVMOperator reg({
              bias_add_op, {out, inputs[2]}, tvm::Attrs(bias_add_attrs), {});
        }
        return out;
-     }},
+     },
+     "", PARAM_INDICES(linear)},
      {Symbol::fromQualString("aten::softmax"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto softmax_op = tvm::relay::Op::Get("nn.softmax");
@@ -555,6 +564,11 @@ RegisterTVMOperator reg({
 bool isSupported(Node* node) {
   auto map = getTVMOperatorMap();
   return map.find(node->kind()) != map.end();
+}
+
+const std::vector<int32_t>& getParamIndices(Node* node) {
+  TORCH_INTERNAL_ASSERT(isSupported(node));
+  return getOpParamsMap()[node->kind()];
 }
 
 tvm::relay::Expr getOperator(Node* node, tvm::Array<tvm::relay::Expr> inputs) {
