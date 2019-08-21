@@ -237,7 +237,7 @@ RegisterTVMOperator reg({
          tvm::Array<tvm::relay::IndexExpr> w_sizes;
          if (num_dims < 4) {
            AT_CHECK(num_dims == 3,
-               "Expected number of min dims for convolution is 3, found:i ",
+               "Expected number of min dims for convolution is 3, found: ",
                num_dims);
            AT_CHECK(conv_attrs->strides.size() == 1,
                "Expected strides size for 1D conv is 1, found: ",
