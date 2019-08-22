@@ -7,10 +7,51 @@
 #include <torch/csrc/jit/interpreter.h>
 #include <limits>
 #include <tvm/runtime/device_api.h>
+#include <tvm/node/container.h>
 
 using namespace torch::jit;
 
 using torch_tvm::utils::DLManagedTensorPtr;
+
+namespace {
+  DLManagedTensorPtr createParamTensor(const IValue& param_val) {
+    auto tensor = param_val.toTensor();
+    auto dl_tensor = torch_tvm::utils::allocAndCopyData(tensor);
+    return DLManagedTensorPtr(dl_tensor);
+  }
+
+  tvm::relay::Constant createParamConstant(
+      const DLManagedTensorPtr& dl_tensor_ptr) {
+    auto nd_array = tvm::runtime::NDArray::FromDLPack(dl_tensor_ptr.get());
+    return tvm::relay::ConstantNode::make(nd_array);
+  }
+
+}
+
+void TVMObject::populateParamTVMTensors(
+    const std::unordered_map<Value*, IValue>& value_to_ivalue) {
+  for (auto& input_value : input_values) {
+    auto* jit_value = input_value.first;
+    auto& graph_input = input_value.second;
+    if (graph_input.is_param) {
+      const auto& input_ivalue = value_to_ivalue.at(jit_value);
+      graph_input.tvm_tensor = createParamTensor(input_ivalue);
+    }
+  }
+}
+
+tvm::Map<std::string, tvm::relay::Constant>
+  TVMObject::generateParamConstantMap() {
+  tvm::Map<std::string, tvm::relay::Constant> params_map;
+  for (const auto& input_value : input_values) {
+    const auto& graph_input = input_value.second;
+    if (graph_input.is_param) {
+      const auto& tvm_var_name = graph_input.tvm_var_name;
+      params_map.Set(tvm_var_name, createParamConstant(graph_input.tvm_tensor));
+    }
+  }
+  return params_map;
+}
 
 tvm::relay::DataType scalarTypeToTVMType(at::ScalarType pt_type) {
   static const std::unordered_map<at::ScalarType, tvm::relay::DataType> type_mapping = {
@@ -327,9 +368,14 @@ void TVMCompiler::run(Stack& stack) {
     }
     auto build_f = build_mod_.GetFunction("build", false);
     auto json_f = build_mod_.GetFunction("get_graph_json", false);
+    auto set_params = build_mod_.GetFunction("set_params", false);
+    auto get_params = build_mod_.GetFunction("get_params", false);
     auto mod_f = build_mod_.GetFunction("get_module", false);
     tvm::Map<tvm::Integer, tvm::Target> target_map = {
         {ctx_.device_type, tvm::Target::Create(device_)}};
+    cache_[spec].populateParamTVMTensors(value_to_ivalue);
+    auto params_constant_map = cache_[spec].generateParamConstantMap();
+    set_params(params_constant_map);
     build_f(tvm_func, target_map, tvm::Target::Create(host_));
     std::string json = json_f();
     tvm::runtime::Module mod = mod_f();
@@ -341,6 +387,15 @@ void TVMCompiler::run(Stack& stack) {
     cache_[spec].kernel = run_mod.GetFunction("run", false);
     cache_[spec].get_output = run_mod.GetFunction("get_output", false);
     auto get_num_outputs = run_mod.GetFunction("get_num_outputs", false);
+
+    // Set parameter inputs.
+    tvm::Map<std::string, tvm::relay::Constant> params = get_params();
+    for (const auto& param : params) {
+        const auto& param_name = param.first;
+        const auto& param_ndarray_val = param.second->data;
+        cache_[spec].set_input(param_name, param_ndarray_val);
+    }
+
     int n = get_num_outputs();
     TORCH_CHECK(
         subgraph_->outputs().size() == n,
@@ -356,6 +411,9 @@ void TVMCompiler::run(Stack& stack) {
   for (auto& input_value : cache_[spec].input_values) {
     auto* value = input_value.first;
     TVMGraphInputInfo& graph_input = input_value.second;
+    if (graph_input.is_param) {
+      continue;
+    }
     if (!value_to_ivalue.count(value)) {
       auto optional_ivalue = toIValue(value);
       TORCH_INTERNAL_ASSERT(optional_ivalue.has_value());
@@ -369,13 +427,6 @@ void TVMCompiler::run(Stack& stack) {
         torch_tvm::utils::isAligned(tensor.data_ptr(),
           tvm::runtime::kAllocAlignment)) {
       dl_tensor = at::toDLPack(tensor);
-    } else if (graph_input.is_param) {
-      if (graph_input.tvm_tensor) {
-        dl_tensor = graph_input.tvm_tensor.get();
-      } else {
-        dl_tensor = torch_tvm::utils::allocAndCopyData(tensor);
-        graph_input.tvm_tensor = DLManagedTensorPtr(dl_tensor);
-      }
     } else {
       dl_tensor =
         torch_tvm::utils::allocAndCopyData(tensor);
