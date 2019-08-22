@@ -96,12 +96,9 @@ tvm::relay::Expr TVMCompiler::convertToRelay(
   }
   // All Ints are converted to int32, which may overflow
   if (val.isInt()) {
-    auto x = tvm::runtime::NDArray::Empty(
-        {}, tvm::runtime::String2TVMType("int32"), ctx);
+    auto x = tvm::runtime::NDArray::Empty({}, tvm::Int(64), ctx);
     auto l = val.toInt();
-    TORCH_CHECK(l <= std::numeric_limits<int32_t>::max());
-    TORCH_CHECK(l >= std::numeric_limits<int32_t>::lowest());
-    reinterpret_cast<int32_t*>(x->data)[0] = l;
+    reinterpret_cast<int64_t*>(x->data)[0] = l;
     auto v = tvm::relay::ConstantNode::make(x);
     return v;
   }
@@ -124,11 +121,8 @@ tvm::relay::Expr TVMCompiler::convertToRelay(
   if (val.isIntList()) {
     tvm::Array<tvm::relay::Expr> tuple_elems;
     for (const auto& elem : val.toIntList()) {
-      auto x = tvm::runtime::NDArray::Empty(
-          {}, tvm::runtime::String2TVMType("int32"), ctx);
-      TORCH_CHECK(elem <= std::numeric_limits<int32_t>::max());
-      TORCH_CHECK(elem >= std::numeric_limits<int32_t>::lowest());
-      reinterpret_cast<int32_t*>(x->data)[0] = elem;
+      auto x = tvm::runtime::NDArray::Empty({}, tvm::Int(64), ctx);
+      reinterpret_cast<int64_t*>(x->data)[0] = elem;
       auto v = tvm::relay::ConstantNode::make(x);
       tuple_elems.push_back(v);
     }
