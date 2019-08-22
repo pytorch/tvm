@@ -12,6 +12,7 @@
 #include "compiler.h"
 #include "fusion_pass.h" // tvm_sym
 #include "operators.h"
+#include "none_var_expr.h"
 
 using namespace torch::jit;
 
@@ -194,15 +195,11 @@ T relayToConstant(tvm::relay::Expr e) {
 }
 
 bool relayIsNone(tvm::relay::Expr e) {
-  if (!isConstant(e)) {
-    return false;
+  auto c = e.as<tvm::relay::NoneVarNode>();
+  if (c) {
+    return true;
   }
-  auto c = e.as<tvm::relay::ConstantNode>();
-  if (!c->is_scalar()) {
-    return false;
-  }
-  auto val = static_cast<uint64_t*>(c->data->data)[0];
-  return val == getNoneSentinel();
+  return false;
 }
 
 uint64_t getNoneSentinel() {

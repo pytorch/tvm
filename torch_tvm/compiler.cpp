@@ -1,5 +1,6 @@
 #include "compiler.h"
 #include "operators.h"
+#include "none_var_expr.h"
 
 #include <ATen/DLConvertor.h>
 #include <torch/csrc/jit/constants.h>
@@ -112,11 +113,7 @@ tvm::relay::Expr TVMCompiler::convertToRelay(
   // TODO Add None type to Relay
   // HACK sentinel value used for None type
   if (val.isNone()) {
-    auto x = tvm::runtime::NDArray::Empty(
-        {}, tvm::runtime::String2TVMType("uint64"), ctx);
-    reinterpret_cast<uint64_t*>(x->data)[0] = getNoneSentinel();
-    auto v = tvm::relay::ConstantNode::make(x);
-    return v;
+    return tvm::relay::NoneVarNode::make();
   }
   if (val.isIntList()) {
     tvm::Array<tvm::relay::Expr> tuple_elems;
@@ -202,11 +199,9 @@ tvm::relay::Function TVMCompiler::convertToRelay(
           if (!skip_user && input_values &&
               std::find(param_indices.begin(),
                 param_indices.end(), input_index) != param_indices.end()) {
-            /*
             TORCH_CHECK((*input_values).count(input) ||
-                (value_map.count(input) == 0),
+                value_map[input].as<tvm::relay::NoneVarNode>(),
                 "Parameter must have a corresponding tvm graph input created.");
-                */
             auto it = input_values->find(input);
             if (it != input_values->end()) {
               (*it).second.is_param = true;
