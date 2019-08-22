@@ -327,7 +327,6 @@ class TestOperators(TVMTest):
         assert torch.allclose(ref_out_no_bias, tvm_out_no_bias, rtol=0.01, atol=0.01)
 
 
-    class TestOperators(TVMTest):
     @TVMTest.given(
         shape=TVMTest.rand_shape(rank=2, min_dim=10),
         out_features=TVMTest.rand_int(15, 30),
