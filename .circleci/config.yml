@@ -5,12 +5,22 @@ jobs:
       - image: ubuntu:latest
     resource_class: 2xlarge+
     steps:
-      - checkout
       - run:
           name: Install dependencies
           command: |
             apt update
             apt-get install -y python3 python3-venv git cmake ninja-build g++ python3-dev llvm
+      - checkout # Important to run checkout step after git has been
+                 # installed, otherwise submodules will not be setup
+                 # properly
+      - run:
+          name: Git Submodules
+          command: |
+            git submodule sync --recursive
+            git submodule update --init --recursive
+      - run:
+          name: Setup Python Virtualenv
+          command: |
             python3 -m venv env
       - run:
           name: Checkout PyTorch
@@ -18,7 +28,7 @@ jobs:
             cd ..
             git clone https://github.com/pytorch/pytorch.git --recursive
       - run:
-          name: Build PyTorch 
+          name: Build PyTorch
           command: |
             source env/bin/activate
             cd ../pytorch
@@ -29,13 +39,7 @@ jobs:
           command: |
             source env/bin/activate
 
-            git submodule sync --recursive
-            git submodule update --init --recursive
-
             python setup.py install --cmake
             mkdir -p tvm/build/
 
-            OMP_NUM_THREADS=1 python setup.py test 
-
-
-
+            OMP_NUM_THREADS=1 python setup.py test
