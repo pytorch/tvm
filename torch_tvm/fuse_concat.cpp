@@ -1,4 +1,4 @@
-#include "fusion_pass.h"
+#include "fuse_concat.h"
 #include "operators.h"
 
 using namespace torch::jit;
@@ -41,7 +41,6 @@ Node* createFusedConcat(Node* node) {
   fused_cat->output()->copyMetadata(node->output());
 
   node->output()->replaceAllUsesWith(fused_cat->output());
-  node->destroyCurrent();
   if (list_construct->output()->uses().empty()) {
     list_construct->destroy();
   }
@@ -49,17 +48,21 @@ Node* createFusedConcat(Node* node) {
 }
 
 void fuseConcats(Block* block_) {
+  std::vector<Node *> deleted_nodes;
   for (auto it = block_->nodes().rbegin(); it != block_->nodes().rend();
        ++it) {
-    Node* cat = *it;
-    if (!isFusableCatNode(cat)) {
+    if (!isFusableCatNode(*it)) {
       continue;
     }
-    createFusedConcat(cat);
+    createFusedConcat(*it);
+    deleted_nodes.push_back(*it);
+  }
+  for(auto del_node : deleted_nodes) {
+    del_node->destroy();
   }
 }
 
-void FuseConcat(std::shared_ptr<Graph> graph) {
+void FuseConcat(std::shared_ptr<Graph>& graph) {
   auto block = graph->block();
   fuseConcats(block);
 }

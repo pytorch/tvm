@@ -291,7 +291,6 @@ RegisterTVMOperator reg({
        return out;
      },
      "", PARAM_INDICES(convolution)},
-     }},
     {Symbol::fromQualString("prim::FusedConcat"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("concatenate");
