@@ -101,7 +101,7 @@ c10::optional<Node*> tryMerge(
 }
 #undef REQ
 
-graph_node_list::iterator scanNode(
+std::pair<graph_node_list::iterator, bool> scanNode(
     Node* consumer,
     AliasDb& aliasDb,
     Block* block) {
@@ -110,18 +110,24 @@ graph_node_list::iterator scanNode(
     if (auto group = tryMerge(consumer, input->node(), aliasDb)) {
       // we successfully merged, so the new group's `inputs` may have
       // changed. So rescan the new group for more merging opportunities.
-      return group.value()->reverseIterator();
+      return {group.value()->reverseIterator(), true};
     }
   }
-  return ++consumer->reverseIterator();
+  return {++consumer->reverseIterator(), false};
 }
 
 void FuseSupportedOps(std::shared_ptr<Graph> graph) {
   AliasDb aliasDb(graph);
   auto block = graph->block();
 
-  for (auto it = block->nodes().rbegin(); it != block->nodes().rend();) {
-    it = scanNode(*it, aliasDb, block);
+  bool any_changed{true};
+  while (any_changed) {
+    any_changed = false;
+    for (auto it = block->nodes().rbegin(); it != block->nodes().rend();) {
+      bool changed;
+      std::tie(it, changed) = scanNode(*it, aliasDb, block);
+      any_changed |= changed;
+    }
   }
   EliminateCommonSubexpression(graph);
   EliminateDeadCode(graph);
