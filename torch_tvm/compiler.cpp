@@ -135,7 +135,7 @@ tvm::relay::Expr TVMCompiler::convertToRelay(
 tvm::relay::Function TVMCompiler::convertToRelay(
     std::shared_ptr<Graph> subgraph,
     TVMContext ctx,
-    std::vector<std::pair<Value*, bool>>* input_values) {
+    std::unordered_map<torch::jit::Value*, TVMGraphInputInfo>* input_values) {
   std::unordered_map<Value*, tvm::relay::Expr> value_map;
   tvm::Array<tvm::relay::Var> input_vars;
 
@@ -145,7 +145,10 @@ tvm::relay::Function TVMCompiler::convertToRelay(
     input_vars.push_back(v);
     if (input_values) {
       // Primary inputs are always mutable.
-      input_values->emplace_back(input, false);
+      input_values->emplace(std::piecewise_construct,
+          std::forward_as_tuple(input),
+          std::forward_as_tuple(false,
+            v.as<tvm::relay::VarNode>()->name_hint()));
     }
     value_map[input] = v;
   }
@@ -180,12 +183,15 @@ tvm::relay::Function TVMCompiler::convertToRelay(
               break;
             } else {
               if (optional_ivalue.value().isTensor()) {
-                if (input_values) {
-                  input_values->emplace_back(input, false);
-                }
                 auto input_var = convertToRelay(input, ctx);
                 input_vars.push_back(input_var);
                 value_map[input] = input_var;
+                if (input_values) {
+                  input_values->emplace(std::piecewise_construct,
+                      std::forward_as_tuple(input),
+                      std::forward_as_tuple(false,
+                        input_var.as<tvm::relay::VarNode>()->name_hint()));
+                }
               } else {
                 value_map[input] = convertToRelay(optional_ivalue.value(), ctx);
               }
@@ -196,14 +202,14 @@ tvm::relay::Function TVMCompiler::convertToRelay(
           if (!skip_user && input_values &&
               std::find(param_indices.begin(),
                 param_indices.end(), input_index) != param_indices.end()) {
-            auto it = std::find_if(input_values->begin(), input_values->end(),
-                [input](const std::pair<Value*, bool>& v)
-                {return v.first == input;});
-            // It is possible that parameter is not in input_values.
-            // This can happen for example when bias input is None in
-            // convolution.
+            /*
+            TORCH_CHECK((*input_values).count(input) ||
+                (value_map.count(input) == 0),
+                "Parameter must have a corresponding tvm graph input created.");
+                */
+            auto it = input_values->find(input);
             if (it != input_values->end()) {
-              (*it).second = true;
+              (*it).second.is_param = true;
             }
           }
           relay_inputs.push_back(value_map[input]);
@@ -352,15 +358,15 @@ void TVMCompiler::run(Stack& stack) {
   // Parameters are managed by cached tvm_param_tensors.
   // They get deallocated when cache_ is deleted.
   std::vector<DLManagedTensorPtr> dl_tensor_list;
-  for (auto i = 0; i < cache_[spec].input_values.size(); ++i) {
-    auto* value = cache_[spec].input_values[i].first;
-    bool input_immutable = cache_[spec].input_values[i].second;
+  for (auto& input_value : cache_[spec].input_values) {
+    auto* value = input_value.first;
+    TVMGraphInputInfo& graph_input = input_value.second;
     if (!value_to_ivalue.count(value)) {
       auto optional_ivalue = toIValue(value);
       TORCH_INTERNAL_ASSERT(optional_ivalue.has_value());
       value_to_ivalue[value] = optional_ivalue.value();
     }
-    auto ivalue = value_to_ivalue.at(cache_[spec].input_values[i].first);
+    auto ivalue = value_to_ivalue.at(value);
     //auto tensor = ivalue.toTensor().to(at::kFloat);
     auto tensor = ivalue.toTensor();
     DLManagedTensor* dl_tensor;
@@ -368,13 +374,12 @@ void TVMCompiler::run(Stack& stack) {
         torch_tvm::utils::isAligned(tensor.data_ptr(),
           tvm::runtime::kAllocAlignment)) {
       dl_tensor = at::toDLPack(tensor);
-    } else if (input_immutable) {
-      if (cache_[spec].tvm_param_tensors.find(value) ==
-        cache_[spec].tvm_param_tensors.end()) {
-        dl_tensor = torch_tvm::utils::allocAndCopyData(tensor);
-        cache_[spec].tvm_param_tensors[value] = DLManagedTensorPtr(dl_tensor);
+    } else if (graph_input.is_param) {
+      if (graph_input.tvm_tensor) {
+        dl_tensor = graph_input.tvm_tensor.get();
       } else {
-        dl_tensor = cache_[spec].tvm_param_tensors[value].get();
+        dl_tensor = torch_tvm::utils::allocAndCopyData(tensor);
+        graph_input.tvm_tensor = DLManagedTensorPtr(dl_tensor);
       }
     } else {
       dl_tensor =
@@ -382,7 +387,8 @@ void TVMCompiler::run(Stack& stack) {
       dl_tensor_list.emplace_back(
           dl_tensor);
     }
-    cache_[spec].set_input(i, tvm::runtime::NDArray::FromDLPack(dl_tensor));
+    cache_[spec].set_input(graph_input.tvm_var_name,
+        tvm::runtime::NDArray::FromDLPack(dl_tensor));
   }
 
   cache_[spec].kernel();
