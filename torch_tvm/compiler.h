@@ -35,6 +35,10 @@ struct TVMObject {
   // Plus indicates if the corresponding value is immutable,
   // e.g., a parameter such as weight.
   std::unordered_map<torch::jit::Value*, TVMGraphInputInfo> input_values;
+  void populateParamTVMTensors(
+      const std::unordered_map<torch::jit::Value*,
+      torch::jit::IValue>& value_to_ivalue);
+  tvm::Map<std::string, tvm::relay::Constant> generateParamConstantMap();
 };
 
 struct TVMCompiler {
