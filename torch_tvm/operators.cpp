@@ -1,5 +1,7 @@
 #include <tvm/relay/attrs/nn.h>
 #include <tvm/relay/attrs/transform.h>
+#include <tvm/relay/transform.h>
+#include <tvm/relay/module.h>
 
 #include <torch/csrc/autograd/record_function.h>
 #include <torch/csrc/jit/custom_operator.h>
@@ -12,6 +14,87 @@
 #include "operators.h"
 
 using namespace torch::jit;
+
+// Because tvm does not expose this API.
+namespace tvm {
+namespace relay {
+Expr InferType(const Expr& expr, const Module& mod_ref);
+}
+}
+
+namespace {
+const tvm::relay::TensorTypeNode getExprType(const tvm::relay::Expr& input) {
+  auto mod = tvm::relay::ModuleNode::FromExpr(input);
+  auto input_type = tvm::relay::InferType(input, mod);
+  auto checked_type = input_type->type_as<tvm::relay::TensorTypeNode>();
+  TORCH_INTERNAL_ASSERT(checked_type);
+  return *checked_type;
+}
+
+tvm::relay::Expr lowerLinear(tvm::Array<tvm::relay::Expr> inputs) {
+  const auto input0_type = getExprType(inputs[0]);
+  const auto input1_type = getExprType(inputs[1]);
+
+  auto shape0 = input0_type.shape;
+  auto shape1 = input1_type.shape;
+  TORCH_CHECK(shape0.size() >= 2, "Input must have at least 2 dims.");
+  TORCH_CHECK(shape1.size() == 2, "Weight input must have 2 dims.");
+  auto reshaped_input = inputs[0];
+  if (shape0.size() > 2) {
+    uint64_t num_elements_to_flatten = 1;
+    int64_t i = 0;
+    for (;i < shape0.size()-1; ++i) {
+      auto d = (shape0[i].as<tvm::IntImm>())->value;
+      num_elements_to_flatten *= d;
+    }
+    auto last_dim = (shape0[i].as<tvm::IntImm>())->value;
+    auto attrs = tvm::make_node<tvm::relay::ReshapeAttrs>();
+    auto& newshape = attrs->newshape;
+    newshape.push_back(tvm::Integer(num_elements_to_flatten));
+    newshape.push_back(tvm::Integer(last_dim));
+    attrs->reverse = false;
+    auto op = tvm::relay::Op::Get("reshape");
+    reshaped_input =
+        tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(attrs), {});
+  }
+
+  //Make sure both inputs have same batch dim.
+  const auto batch_dim0 = (shape0[0].as<tvm::IntImm>())->value;
+  const auto batch_dim1 = (shape0[0].as<tvm::IntImm>())->value;
+  TORCH_CHECK((batch_dim0 == batch_dim1),
+      "Input and weight must have same value in batch dim.");
+
+  auto dense_attrs = tvm::make_node<tvm::relay::DenseAttrs>();
+  auto out = tvm::relay::CallNode::make(
+      tvm::relay::Op::Get("nn.dense"),
+      {reshaped_input, inputs[1]},
+      tvm::Attrs(dense_attrs),
+      {});
+
+  if (shape0.size() > 2) {
+    auto attrs = tvm::make_node<tvm::relay::ReshapeAttrs>();
+    for (int64_t i = 0;i < shape0.size() - 1; ++i) {
+      attrs->newshape.push_back((shape0[i].as<tvm::IntImm>())->value);
+    }
+    attrs->newshape.push_back((shape1[0].as<tvm::IntImm>())->value);
+    attrs->reverse = false;
+    auto op = tvm::relay::Op::Get("reshape");
+    out = tvm::relay::CallNode::make(op, {out}, tvm::Attrs(attrs), {});
+  }
+
+  if (!relayIsNone(inputs[2])) {
+    const auto input2_type = getExprType(inputs[2]);
+    auto shape2 = input2_type.shape;
+    TORCH_CHECK(shape2.size() == 1, "Bias input must be 1 dim.");
+    auto bias_add_op = tvm::relay::Op::Get("nn.bias_add");
+    auto bias_add_attrs = tvm::make_node<tvm::relay::BiasAddAttrs>();
+    bias_add_attrs->axis = -1;
+    return tvm::relay::CallNode::make(
+        bias_add_op, {out, inputs[2]}, tvm::Attrs(bias_add_attrs), {});
+  }
+  return out;
+}
+} // namespace
 
 std::unordered_map<std::string, TVMScheduleFunctor>& getTVMScheduleMap() {
   static std::unordered_map<std::string, TVMScheduleFunctor> map;
@@ -513,30 +596,7 @@ RegisterTVMOperator reg({
      }},
     {Symbol::fromQualString("aten::linear"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
-       Value* input = node->input(0);
-       auto d_tensor = input->type()->cast<TensorType>();
-       if (d_tensor) {
-         auto optional_n_dim = d_tensor->dim();
-         TORCH_INTERNAL_ASSERT(optional_n_dim);
-         int64_t n_dim = optional_n_dim.value();
-         TORCH_CHECK(n_dim == 2,
-                     "WARNING: relay does not support dense operation on inputs more than 2 dim");
-       }
-       auto dense_attrs = tvm::make_node<tvm::relay::DenseAttrs>();
-       auto out = tvm::relay::CallNode::make(
-           tvm::relay::Op::Get("nn.dense"),
-           {inputs[0], inputs[1]},
-           tvm::Attrs(dense_attrs),
-           {});
-
-       if (!relayIsNone(inputs[2])) {
-         auto bias_add_op = tvm::relay::Op::Get("nn.bias_add");
-         auto bias_add_attrs = tvm::make_node<tvm::relay::BiasAddAttrs>();
-         bias_add_attrs->axis = 1;
-         return tvm::relay::CallNode::make(
-             bias_add_op, {out, inputs[2]}, tvm::Attrs(bias_add_attrs), {});
-       }
-       return out;
+       return lowerLinear(inputs);
      },
      "", PARAM_INDICES(linear)},
      {Symbol::fromQualString("aten::softmax"),
