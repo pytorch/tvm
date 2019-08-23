@@ -9,6 +9,7 @@
 #include "fuse_linear.h"
 #include "fuse_concat.h"
 #include "fusion_pass.h"
+#include "remove_dropout.h"
 
 namespace py = pybind11;
 using namespace torch::jit;
@@ -50,6 +51,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
     if (fusion_enabled) {
       FuseLinear(g);
       FuseConcat(g);
+      RemoveDropout(g);
       FuseSupportedOps(g);
     }
   });

@@ -102,3 +102,38 @@ class TestCore(TVMTest):
         torch_tvm.disable()
 
         torch.testing.assert_allclose(jit_out, tvm_out, rtol=0.01, atol=0.01)
+
+    @TVMTest.given(
+        shape=TVMTest.rand_shape(rank=4, min_dim=4),
+        examples=1
+    )
+    def test_dropout_removal(self, shape):
+        input_a = torch.rand(shape)
+        input_b = torch.rand(shape)
+        input_c = torch.rand(shape)
+
+        def dropout_training(a, b, c):
+            t = a + b
+            s = torch.dropout(t, 0.1, True)
+            return s + c
+
+        def dropout_inference(a, b, c):
+            t = a + b
+            s = torch.dropout(t, 0.1, False)
+            return s + c
+
+        torch_tvm.enable()
+        tvm_graph_training = torch.jit.trace(dropout_training, \
+                (input_a, input_b, input_c))
+        tvm_graph_inference = torch.jit.trace(dropout_inference, \
+                (input_a, input_b, input_c))
+        torch_tvm.disable()
+        assert "aten::dropout" in \
+                str(tvm_graph_training.graph_for(input_a, input_b, input_c)), \
+                "dropout must not be removed during training."
+        assert "aten::dropout" not in \
+                str(tvm_graph_inference.graph_for(input_a, input_b, input_c)), \
+                "dropout must be removed during inference."
+
+if __name__ == "__main__":
+    unittest.main()
