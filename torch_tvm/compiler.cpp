@@ -11,6 +11,47 @@ using namespace torch::jit;
 
 using torch_tvm::utils::DLManagedTensorPtr;
 
+namespace {
+std::vector<DLManagedTensorPtr> set_input(
+    std::unordered_map<Value*, IValue>& value_to_ivalue,
+    TVMObject& cache) {
+  std::vector<DLManagedTensorPtr> input_tensors;
+  for (auto& input_value : cache.input_values) {
+    auto* value = input_value.first;
+    TVMGraphInputInfo& graph_input = input_value.second;
+    if (!value_to_ivalue.count(value)) {
+      auto optional_ivalue = toIValue(value);
+      TORCH_INTERNAL_ASSERT(optional_ivalue.has_value());
+      value_to_ivalue[value] = optional_ivalue.value();
+    }
+    auto ivalue = value_to_ivalue.at(value);
+    //auto tensor = ivalue.toTensor().to(at::kFloat);
+    auto tensor = ivalue.toTensor();
+    DLManagedTensor* dl_tensor;
+    if (tensor.is_contiguous() &&
+        torch_tvm::utils::isAligned(tensor.data_ptr(),
+          tvm::runtime::kAllocAlignment)) {
+      dl_tensor = at::toDLPack(tensor);
+    } else if (graph_input.is_param) {
+      if (graph_input.tvm_tensor) {
+        dl_tensor = graph_input.tvm_tensor.get();
+      } else {
+        dl_tensor = torch_tvm::utils::allocAndCopyData(tensor);
+        graph_input.tvm_tensor = DLManagedTensorPtr(dl_tensor);
+      }
+    } else {
+      dl_tensor =
+        torch_tvm::utils::allocAndCopyData(tensor);
+      input_tensors.emplace_back(dl_tensor);
+    }
+    cache.set_input(graph_input.tvm_var_name,
+        tvm::runtime::NDArray::FromDLPack(dl_tensor));
+  }
+  return input_tensors;
+}
+
+} // namespace
+
 tvm::relay::DataType scalarTypeToTVMType(at::ScalarType pt_type) {
   static const std::unordered_map<at::ScalarType, tvm::relay::DataType> type_mapping = {
     {at::ScalarType::Float, ::tvm::Float(32)},
@@ -202,11 +243,6 @@ tvm::relay::Function TVMCompiler::convertToRelay(
           if (!skip_user && input_values &&
               std::find(param_indices.begin(),
                 param_indices.end(), input_index) != param_indices.end()) {
-            /*
-            TORCH_CHECK((*input_values).count(input) ||
-                (value_map.count(input) == 0),
-                "Parameter must have a corresponding tvm graph input created.");
-                */
             auto it = input_values->find(input);
             if (it != input_values->end()) {
               (*it).second.is_param = true;
@@ -357,39 +393,8 @@ void TVMCompiler::run(Stack& stack) {
   // Only for those inputs which are not parameters.
   // Parameters are managed by cached tvm_param_tensors.
   // They get deallocated when cache_ is deleted.
-  std::vector<DLManagedTensorPtr> dl_tensor_list;
-  for (auto& input_value : cache_[spec].input_values) {
-    auto* value = input_value.first;
-    TVMGraphInputInfo& graph_input = input_value.second;
-    if (!value_to_ivalue.count(value)) {
-      auto optional_ivalue = toIValue(value);
-      TORCH_INTERNAL_ASSERT(optional_ivalue.has_value());
-      value_to_ivalue[value] = optional_ivalue.value();
-    }
-    auto ivalue = value_to_ivalue.at(value);
-    //auto tensor = ivalue.toTensor().to(at::kFloat);
-    auto tensor = ivalue.toTensor();
-    DLManagedTensor* dl_tensor;
-    if (tensor.is_contiguous() &&
-        torch_tvm::utils::isAligned(tensor.data_ptr(),
-          tvm::runtime::kAllocAlignment)) {
-      dl_tensor = at::toDLPack(tensor);
-    } else if (graph_input.is_param) {
-      if (graph_input.tvm_tensor) {
-        dl_tensor = graph_input.tvm_tensor.get();
-      } else {
-        dl_tensor = torch_tvm::utils::allocAndCopyData(tensor);
-        graph_input.tvm_tensor = DLManagedTensorPtr(dl_tensor);
-      }
-    } else {
-      dl_tensor =
-        torch_tvm::utils::allocAndCopyData(tensor);
-      dl_tensor_list.emplace_back(
-          dl_tensor);
-    }
-    cache_[spec].set_input(graph_input.tvm_var_name,
-        tvm::runtime::NDArray::FromDLPack(dl_tensor));
-  }
+  std::vector<DLManagedTensorPtr> dl_tensor_list =
+    set_input(value_to_ivalue, cache_[spec]);
 
   cache_[spec].kernel();
 
