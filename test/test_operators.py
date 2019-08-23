@@ -343,7 +343,7 @@ class TestOperators(TVMTest):
             return torch.fbgemm_linear_int8_weight_fp32_activation(
                 input.float(), q_weight, packed_weight, col_offsets, scale, zero_point, bias.float())
         ref_out, tvm_out = self.runBoth(fbgemm_quantized_linear, input, weight, bias)
-        # relax the constraint to abvoid flaky test
+        # relax the constraint to avoid flaky test
         assert torch.allclose(ref_out, tvm_out, rtol=0.5, atol=0.5)
 
 
