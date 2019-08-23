@@ -369,5 +369,17 @@ class TestOperators(TVMTest):
         ref_out, tvm_out = self.runBoth(softmax, input)
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
+    @TVMTest.given(
+        shape=TVMTest.rand_shape(rank=1),
+    )
+    def test_clamp(self, shape):
+        input = torch.rand(shape)
+
+        def clamp(input):
+            return torch.clamp(input + 3.0, 0.0, 6.0)
+
+        ref_out, tvm_out = self.runBoth(clamp, input)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
+
 if __name__ == "__main__":
     unittest.main()

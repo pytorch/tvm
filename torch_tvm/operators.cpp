@@ -444,6 +444,16 @@ RegisterTVMOperator reg({
        auto out = tvm::relay::CallNode::make(op, inputs, tvm::Attrs(), {});
        return out;
      }},
+    {Symbol::fromQualString("aten::clamp"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       auto op = tvm::relay::Op::Get("clip");
+       auto clip_attrs = tvm::make_node<tvm::relay::ClipAttrs>();
+       clip_attrs->a_min = relayToConstant<float>(inputs[1]);
+       clip_attrs->a_max = relayToConstant<float>(inputs[2]);
+       auto out = tvm::relay::CallNode::make(
+         op, {inputs[0]}, tvm::Attrs(clip_attrs), {});
+       return out;
+     }},
     {Symbol::fromQualString("aten::avg_pool2d"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("nn.avg_pool2d");
