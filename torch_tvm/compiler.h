@@ -12,6 +12,21 @@
 
 #include "memory_utils.h"
 
+struct TVMGraphInputInfo {
+  TVMGraphInputInfo(bool is_param_, std::string tvm_var_name_) {
+    is_param = is_param_;
+    tvm_var_name = std::move(tvm_var_name_);
+  }
+  TVMGraphInputInfo(bool is_param_, std::string&& tvm_var_name_) {
+    is_param = is_param_;
+    tvm_var_name = tvm_var_name_;
+  }
+  std::string tvm_var_name;
+  bool is_param;
+  // DLManagedTensorPtr = unique_ptr<DLManagedTensor, DLManagedTensorDeleter>
+  torch_tvm::utils::DLManagedTensorPtr tvm_tensor;
+};
+
 struct TVMObject {
   tvm::PackedFunc kernel;
   tvm::PackedFunc set_input;
@@ -19,10 +34,7 @@ struct TVMObject {
   // Map input indices to values in the subgraph
   // Plus indicates if the corresponding value is immutable,
   // e.g., a parameter such as weight.
-  std::vector<std::pair<torch::jit::Value*, bool>> input_values;
-  // DLManagedTensorPtr = unique_ptr<DLManagedTensor, DLManagedTensorDeleter>
-  std::unordered_map<torch::jit::Value*, torch_tvm::utils::DLManagedTensorPtr>
-    tvm_param_tensors;
+  std::unordered_map<torch::jit::Value*, TVMGraphInputInfo> input_values;
 };
 
 struct TVMCompiler {
@@ -54,5 +66,6 @@ struct TVMCompiler {
   static tvm::relay::Function convertToRelay(
       std::shared_ptr<torch::jit::Graph> subgraph,
       TVMContext ctx,
-      std::vector<std::pair<torch::jit::Value*, bool>>* input_values = nullptr);
+      std::unordered_map<torch::jit::Value*, TVMGraphInputInfo>*
+      input_values = nullptr);
 };
