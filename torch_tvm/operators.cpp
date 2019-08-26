@@ -9,6 +9,7 @@
 #include <torch/csrc/jit/passes/utils/subgraph_utils.h>
 
 #include "custom_tvm_ops/relay/custom_layer_norm_attrs.h"
+#include "custom_tvm_ops/relay/quantize_attrs.h"
 #include "compiler.h"
 #include "fusion_pass.h" // tvm_sym
 #include "operators.h"
@@ -495,6 +496,53 @@ RegisterTVMOperator reg({
        n->tuple = std::move(out);
        n->index = 0;
        return tvm::relay::TupleGetItem(n);
+     }},
+    {Symbol::fromQualString("aten::fbgemm_linear_int8_weight_fp32_activation"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       // inputs[0]: data_fp32
+       // inputs[1]: weight_int8
+       // inputs[2]: packed_weight
+       // inputs[3]: weight_acc
+       // inputs[4]: weight_scale
+       // inputs[5]: weight_zp
+       // inputs[6]: bias
+       TORCH_CHECK(
+           inputs.size() == 7, "Given input size from quantized linear", inputs.size(), " inputs");
+       auto op_find_minmax = tvm::relay::Op::Get("nn.quantize_findminmax");
+       auto op_choose_q_params = tvm::relay::Op::Get("nn.choose_quantize_params");
+       auto op_data_q = tvm::relay::Op::Get("nn.quantize_data_int8_quantize");
+       auto op_data_deq = tvm::relay::Op::Get("nn.quantize_data_mm_dequantize");
+
+       auto min_max_call = tvm::relay::CallNode::make(op_find_minmax, {inputs[0]}, tvm::Attrs(), {});
+       const tvm::relay::Expr& data_min = tvm::relay::TupleGetItemNode::make(min_max_call, 0);
+       const tvm::relay::Expr& data_max = tvm::relay::TupleGetItemNode::make(min_max_call, 1);
+
+       auto scheme_attrs = tvm::make_node<tvm::relay::QuantizeSchemeAttrs>();
+       scheme_attrs->precision = 8;
+       scheme_attrs->is_signed = false;
+
+       auto q_params = tvm::relay::CallNode::make(op_choose_q_params, {data_min, data_max}, tvm::Attrs(scheme_attrs), {});
+       const tvm::relay::Expr& data_zp = tvm::relay::TupleGetItemNode::make(q_params, 0);
+       const tvm::relay::Expr& data_scale = tvm::relay::TupleGetItemNode::make(q_params, 1);
+
+       // data, zero_point, scale
+       auto q_data_call = tvm::relay::CallNode::make(op_data_q, {inputs[0], data_zp, data_scale},
+                                                     tvm::Attrs(scheme_attrs), {});
+
+       const tvm::relay::Expr& q_data = tvm::relay::TupleGetItemNode::make(q_data_call, 0);
+       const tvm::relay::Expr& q_data_acc = tvm::relay::TupleGetItemNode::make(q_data_call, 1);
+
+       tvm::Array<tvm::relay::Expr> deq_inputs = {q_data, inputs[1], inputs[3], q_data_acc, data_scale, data_zp};
+
+       auto params_attrs = tvm::make_node<tvm::relay::QuantizedParamsAttrs>();
+       params_attrs->w_scale= static_cast<double>(relayToConstant<float>(inputs[4]));
+       params_attrs->w_zp = relayToConstant<int>(inputs[5]);
+
+       auto mm = tvm::relay::CallNode::make(op_data_deq, deq_inputs, tvm::Attrs(params_attrs), {});
+       auto bias_add_op = tvm::relay::Op::Get("nn.bias_add");
+       auto bias_add_attrs = tvm::make_node<tvm::relay::BiasAddAttrs>();
+       bias_add_attrs->axis = 1;
+       return tvm::relay::CallNode::make(bias_add_op, {mm, inputs[6]}, tvm::Attrs(bias_add_attrs), {});
      }},
     {Symbol::fromQualString("aten::relu_"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
