@@ -23,8 +23,8 @@ TVM_REGISTER_API("relay.op.nn._make.quantize_data_int8_quantize")
 
 
 RELAY_REGISTER_OP("nn.quantize_data_int8_quantize")
-.describe(R"code(dynamic quantization of weight or activation.
-- **weight**: (channels, in_channels)
+.describe(R"code(dynamic quantization of activation.
+- **data**: (M, N)
 )code" TVM_ADD_FILELINE)
   .set_num_inputs(3)
   .add_argument("data", "Tensor", "The input tensor.")

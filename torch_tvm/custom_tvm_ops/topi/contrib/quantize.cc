@@ -17,6 +17,7 @@ TVM_REGISTER_GLOBAL("tvm.contrib.find_minmax")
       // calculate the data_min and data_max
       CHECK(input->strides == nullptr) << "find_minmax does not support the dltensor with strides";
       auto data_ptr = static_cast<float *>(input->data);
+      CHECK(input->ndim == 2) << "find_minmax only support the two dimenstion input";
       int m = input->shape[0];
       int n = input->shape[1];
       float d_min = data_ptr[0];
