@@ -15,7 +15,7 @@ namespace relay {
 
 Expr MakeDataInt8Quantization(Expr data, Expr zero_point, Expr scale, bool is_signed, int precision) {
   static const Op& op = Op::Get("nn.quantize_data_int8_quantize");
-  auto attrs = make_node<QuantizedParamsAttrs>();
+  auto attrs = make_node<QuantizeSchemeAttrs>();
   attrs->precision = precision;
   attrs->is_signed = is_signed;
   return CallNode::make(op, {data, zero_point, scale}, Attrs(attrs), {});
@@ -27,7 +27,7 @@ bool DataInt8QuantizationRel(const Array<Type>& types,
                              const TypeReporter& reporter) {
   // todo: add axis to decide which dim to do the accumulation
   CHECK_EQ(types.size(), 4);
-  const QuantizedParamsAttrs* param = attrs.as<QuantizedParamsAttrs>();
+  const QuantizeSchemeAttrs* param = attrs.as<QuantizeSchemeAttrs>();
   const auto* data = types[0].as<TensorTypeNode>();
   // unchnaged shape
   Array<tvm::Expr> oshape = data->shape;
@@ -97,7 +97,7 @@ bool DataMMDequantizeRel(const Array<Type>& types,
 }
 
 Expr MakeChooseQuantizeParams(Expr data_min, Expr data_max, bool is_signed, int precision) {
-  auto attrs = make_node<QuantizedParamsAttrs>();
+  auto attrs = make_node<QuantizeSchemeAttrs>();
   attrs->precision = precision;
   attrs->is_signed = is_signed;
   static const Op& op = Op::Get("nn.choose_quantize_params");

@@ -16,6 +16,8 @@ namespace relay {
 
 TVM_REGISTER_NODE_TYPE(QuantizedParamsAttrs);
 
+TVM_REGISTER_NODE_TYPE(QuantizeSchemeAttrs);
+
 TVM_REGISTER_API("relay.op.nn._make.quantize_data_int8_quantize")
   .set_body_typed(MakeDataInt8Quantization);
 
@@ -28,7 +30,7 @@ RELAY_REGISTER_OP("nn.quantize_data_int8_quantize")
   .add_argument("data", "Tensor", "The input tensor.")
   .add_argument("zero_point", "Tensor", "The zero_point parameter for quantization")
   .add_argument("scale", "Tensor", "the scale parameter for quantization")
-  .set_attrs_type_key("relay.attrs.QuantizedParamsAttrs")
+  .set_attrs_type_key("relay.attrs.QuantizeSchemeAttrs")
   .set_support_level(10)
   .add_type_rel("DataInt8Quantization", DataInt8QuantizationRel);
 
@@ -72,7 +74,7 @@ RELAY_REGISTER_OP("nn.choose_quantize_params")
 .describe(R"code(calculate the zero_point and scale.
 )code" TVM_ADD_FILELINE)
   .set_num_inputs(2)
-  .set_attrs_type_key("relay.attrs.QuantizedParamsAttrs")
+  .set_attrs_type_key("relay.attrs.QuantizeSchemeAttrs")
   .add_argument("data_min", "Tensor", "The min of input data.")
   .add_argument("data_max", "Tensor", "The max of input data.")
   .set_support_level(4)

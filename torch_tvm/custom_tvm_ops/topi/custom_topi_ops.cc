@@ -66,7 +66,7 @@ class CustomTOPIOpRegisterer {
     (*reg_ptr)(
         "nn.quantize_findminmax",
         "TOpPattern",
-        static_cast<int>(OpPatternKind::kOutEWiseFusable),
+        static_cast<int>(OpPatternKind::kCommReduce),
         10);
     (*reg_ptr)(
         "nn.quantize_findminmax",
@@ -76,7 +76,7 @@ class CustomTOPIOpRegisterer {
                const tvm::Array<tvm::Tensor>& inputs,
                const tvm::relay::Type& out_type,
                const tvm::Target& target) -> tvm::Array<tvm::Tensor> {
-              return tvm::Array<tvm::Tensor>{topi::contrib::quantize_findminmax(inputs[0])};
+              return topi::contrib::quantize_findminmax(inputs[0]);
             }),
         10);
     (*reg_ptr)(
@@ -92,7 +92,7 @@ class CustomTOPIOpRegisterer {
     (*reg_ptr)(
         "nn.choose_quantize_params",
         "TOpPattern",
-        static_cast<int>(OpPatternKind::kOutEWiseFusable),
+        static_cast<int>(OpPatternKind::kOpaque),
         10);
     (*reg_ptr)(
         "nn.choose_quantize_params",
@@ -102,11 +102,10 @@ class CustomTOPIOpRegisterer {
                const tvm::Array<tvm::Tensor>& inputs,
                const tvm::relay::Type& out_type,
                const tvm::Target& target) -> tvm::Array<tvm::Tensor> {
-              const auto* param = attrs.as<relay::QuantizedParamsAttrs>();
+              const auto* param = attrs.as<relay::QuantizeSchemeAttrs>();
               auto precision = param->precision;
               auto is_signed = param->is_signed;
-              return tvm::Array<tvm::Tensor>{topi::contrib::choose_quantize_params(
-                inputs[0], inputs[1], is_signed, precision)};
+              return topi::contrib::choose_quantize_params(inputs[0], inputs[1], is_signed, precision);
             }),
         10);
     (*reg_ptr)(
@@ -132,11 +131,10 @@ class CustomTOPIOpRegisterer {
                const tvm::Array<tvm::Tensor>& inputs,
                const tvm::relay::Type& out_type,
                const tvm::Target& target) -> tvm::Array<tvm::Tensor> {
-              const auto* param = attrs.as<relay::QuantizedParamsAttrs>();
+              const auto* param = attrs.as<relay::QuantizeSchemeAttrs>();
               auto precision = param->precision;
               auto is_signed = param->is_signed;
-              return tvm::Array<tvm::Tensor>{topi::data_int8_quantize(
-                inputs[0], inputs[1], inputs[2], is_signed, precision)};
+              return topi::data_int8_quantize(inputs[0], inputs[1], inputs[2], is_signed, precision);
             }),
         10);
     (*reg_ptr)(
@@ -163,13 +161,13 @@ class CustomTOPIOpRegisterer {
                const tvm::relay::Type& out_type,
                const tvm::Target& target) -> tvm::Array<tvm::Tensor> {
               const auto* param = attrs.as<relay::QuantizedParamsAttrs>();
-              return tvm::Array<tvm::Tensor>{topi::data_int8_mm_dequantize(
+              return topi::data_int8_mm_dequantize(
                 inputs[0], inputs[1], inputs[2], inputs[3],
-                inputs[4], inputs[5], param->w_scale, param->w_zp)};
+                inputs[4], inputs[5], param->w_scale, param->w_zp);
             }),
         10);
     (*reg_ptr)(
-         "nn.quantize_data_mm_dequantize",
+        "nn.quantize_data_mm_dequantize",
         "FTVMSchedule",
         tvm::relay::FTVMSchedule(
             [](const tvm::Attrs& attrs,

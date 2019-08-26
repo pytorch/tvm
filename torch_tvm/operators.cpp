@@ -425,26 +425,28 @@ RegisterTVMOperator reg({
        const tvm::relay::Expr& data_min = tvm::relay::TupleGetItemNode::make(min_max_call, 0);
        const tvm::relay::Expr& data_max = tvm::relay::TupleGetItemNode::make(min_max_call, 1);
 
-       auto attrs = tvm::make_node<tvm::relay::QuantizedParamsAttrs>();
-       attrs->precision = 8;
-       attrs->is_signed = false;
-       attrs->w_scale= static_cast<double>(relayToConstant<float>(inputs[4]));
-       attrs->w_zp = relayToConstant<int>(inputs[5]);
+       auto scheme_attrs = tvm::make_node<tvm::relay::QuantizeSchemeAttrs>();
+       scheme_attrs->precision = 8;
+       scheme_attrs->is_signed = false;
 
-       auto q_params = tvm::relay::CallNode::make(op_choose_q_params, {data_min, data_max}, tvm::Attrs(attrs), {});
+       auto q_params = tvm::relay::CallNode::make(op_choose_q_params, {data_min, data_max}, tvm::Attrs(scheme_attrs), {});
        const tvm::relay::Expr& data_zp = tvm::relay::TupleGetItemNode::make(q_params, 0);
        const tvm::relay::Expr& data_scale = tvm::relay::TupleGetItemNode::make(q_params, 1);
 
        // data, zero_point, scale
        auto q_data_call = tvm::relay::CallNode::make(op_data_q, {inputs[0], data_zp, data_scale},
-                                                     tvm::Attrs(attrs), {});
+                                                     tvm::Attrs(scheme_attrs), {});
 
        const tvm::relay::Expr& q_data = tvm::relay::TupleGetItemNode::make(q_data_call, 0);
        const tvm::relay::Expr& q_data_acc = tvm::relay::TupleGetItemNode::make(q_data_call, 1);
 
        tvm::Array<tvm::relay::Expr> deq_inputs = {q_data, inputs[1], inputs[3], q_data_acc, data_scale, data_zp};
 
-       auto mm = tvm::relay::CallNode::make(op_data_deq, deq_inputs, tvm::Attrs(attrs), {});
+       auto params_attrs = tvm::make_node<tvm::relay::QuantizedParamsAttrs>();
+       params_attrs->w_scale= static_cast<double>(relayToConstant<float>(inputs[4]));
+       params_attrs->w_zp = relayToConstant<int>(inputs[5]);
+
+       auto mm = tvm::relay::CallNode::make(op_data_deq, deq_inputs, tvm::Attrs(params_attrs), {});
        auto bias_add_op = tvm::relay::Op::Get("nn.bias_add");
        auto bias_add_attrs = tvm::make_node<tvm::relay::BiasAddAttrs>();
        bias_add_attrs->axis = 1;

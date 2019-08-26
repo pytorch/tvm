@@ -1,3 +1,5 @@
+#pragma once
+
 #include <relay/op/op_common.h>
 #include <relay/op/type_relations.h>
 #include <relay/pass/alter_op_layout.h>
