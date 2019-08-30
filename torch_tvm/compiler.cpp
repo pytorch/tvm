@@ -15,8 +15,6 @@ using namespace torch::jit;
 
 using torch_tvm::utils::DLManagedTensorPtr;
 
-bool debug = 0;
-
 namespace {
 std::vector<DLManagedTensorPtr> set_input(
     std::unordered_map<Value*, IValue>& value_to_ivalue,
@@ -342,11 +340,13 @@ TVMCompiler::TVMCompiler(
     const Node* node,
     int opt_level,
     bool strict,
+    bool debug,
     std::string device_type,
     std::string device,
     std::string host)
     : opt_level_(opt_level),
       strict_(strict),
+      debug_(debug),
       device_type_(device_type),
       device_(device),
       host_(host) {
@@ -372,12 +372,6 @@ void TVMCompiler::run(Stack& stack) {
     value_to_ivalue[value_input] = inputs[i];
   }
 
-  if (debug) {
-    std::cout <<"subgraph \n";
-    std::cout << *subgraph_ << std::endl;
-    std::cout <<"END OF Input subgraph\n";
-  }
-
   CompleteArgumentSpec spec{false, ArrayRef<IValue>(inputs)};
 
   if (cache_.find(spec) == cache_.end()) {
@@ -395,6 +389,13 @@ void TVMCompiler::run(Stack& stack) {
             *subgraph_);
       }
     }
+
+    if (debug_) {
+      std::cout <<"subgraph \n";
+      std::cout << *subgraph_ << std::endl;
+      std::cout <<"END OF Input subgraph\n";
+    }
+
     // bail out mechanism: try to convert to Relay, if it fails to convert the
     // graph by any reason(i.e. op difference), depend on the user preference,
     // either throw or fall back to the JIT interpreter for execution
@@ -431,7 +432,7 @@ void TVMCompiler::run(Stack& stack) {
     build_f(tvm_func, target_map, tvm::Target::Create(host_));
     tvm::runtime::Module mod = mod_f();
     std::string json = json_f();
-    if (debug) {
+    if (debug_) {
       auto lowered_f = build_mod_.GetFunction("get_lowered_funcs", false);
       tvm::Map<std::string, tvm::Array<tvm::LoweredFunc> > lowered_funcs = lowered_f();
       for (auto funcs : lowered_funcs) {

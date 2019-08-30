@@ -46,6 +46,7 @@ struct TVMCompiler {
       const torch::jit::Node* node,
       int opt_level = 2,
       bool strict = false,
+      bool debug = false,
       std::string device_type = "cpu",
       std::string device = "llvm",
       std::string host = "llvm");
@@ -57,6 +58,7 @@ struct TVMCompiler {
   TVMContext ctx_;
   int opt_level_;
   bool strict_;
+  bool debug_;
   std::string device_type_;
   std::string device_;
   std::string host_;
