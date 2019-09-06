@@ -152,30 +152,6 @@ class CustomTOPIOpRegisterer {
         "TOpPattern",
         static_cast<int>(OpPatternKind::kOutEWiseFusable),
         10);
-    (*reg_ptr)(
-        "nn.quantize_data_mm_dequantize",
-        "FTVMCompute",
-        tvm::relay::FTVMCompute(
-            [](const tvm::Attrs& attrs,
-               const tvm::Array<tvm::Tensor>& inputs,
-               const tvm::relay::Type& out_type,
-               const tvm::Target& target) -> tvm::Array<tvm::Tensor> {
-              const auto* param = attrs.as<relay::QuantizedParamsAttrs>();
-              return topi::data_int8_mm_dequantize(
-                inputs[0], inputs[1], inputs[2], inputs[3],
-                inputs[4], inputs[5], param->w_scale, param->w_zp);
-            }),
-        10);
-    (*reg_ptr)(
-        "nn.quantize_data_mm_dequantize",
-        "FTVMSchedule",
-        tvm::relay::FTVMSchedule(
-            [](const tvm::Attrs& attrs,
-               const tvm::Array<tvm::Tensor>& outs,
-               const tvm::Target& target) -> tvm::Schedule {
-              return topi::generic::schedule_quantize_data_mm_dequantize(outs);
-            }),
-        10);
   }
 };
 
@@ -198,6 +174,14 @@ TVM_REGISTER_GLOBAL("nn.custom_layer_norm")
           args[3],
           args[4],
           static_cast<double>(args[5]));
+    });
+
+TVM_REGISTER_GLOBAL("nn.compute_quantized_mm_dequantize")
+    .set_body([](TVMArgs args, TVMRetValue* rv) {
+      CHECK(args.size() == 9);
+      *rv = data_int8_mm_dequantize(
+        args[0], args[1], args[2], args[3],
+        args[4], args[5], args[6], args[7], args[8]);
     });
 
 } // namespace topi

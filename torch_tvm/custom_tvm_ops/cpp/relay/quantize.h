@@ -39,7 +39,8 @@ Expr MakeDataMMDequantize(
     Expr data_scale,
     Expr data_zero_point,
     const double w_scale,
-    const int w_zp);
+    const int w_zp,
+    const int N);
 
 bool DataMMDequantizeRel(
     const Array<Type>& types,

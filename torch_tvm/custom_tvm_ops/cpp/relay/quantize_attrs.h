@@ -20,12 +20,19 @@ struct QuantizeSchemeAttrs : public tvm::AttrsNode<QuantizeSchemeAttrs> {
 struct QuantizedParamsAttrs : public tvm::AttrsNode<QuantizedParamsAttrs> {
   double w_scale;
   int w_zp;
+  /*
+   * This param appears here because, input shape of weight change due to
+   * packing thus need this to convey what is the true output shape.
+   */
+  int N;
 
    TVM_DECLARE_ATTRS(QuantizedParamsAttrs, "relay.attrs.QuantizedParamsAttrs") {
     TVM_ATTR_FIELD(w_scale).set_default(1.0)
       .describe("weight scale.");
     TVM_ATTR_FIELD(w_zp).set_default(0)
       .describe("weight zero point.");
+    TVM_ATTR_FIELD(N).set_default(-1)
+      .describe("N dim of output matrix in MxN.");
   }
 };
 }

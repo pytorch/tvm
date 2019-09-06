@@ -9,7 +9,7 @@ from tvm import relay # This registers all the schedules
 from ._torch_tvm import *
 from ._torch_tvm import _push_relay_expr
 from tvm._ffi.function import _init_api # This lets us use PackedFunc with torch_tvm
-from torch_tvm.custom_tvm_ops.relay import custom_fp32_dense
+from torch_tvm import custom_tvm_ops
 _init_api("torch_tvm")
 
 def to_relay(pt_func, inputs):

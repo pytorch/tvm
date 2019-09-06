@@ -22,6 +22,7 @@ Array<Tensor> data_int8_mm_dequantize(
     const Tensor& data_scale,
     const Tensor& data_zero_point,
     const double weight_scale,
-    const int weight_zero_point);
+    const int weight_zero_point,
+    const int N);
 
 } // namespace topi

@@ -2,6 +2,7 @@
 #include <tvm/relay/attrs/transform.h>
 #include <tvm/relay/transform.h>
 #include <tvm/relay/module.h>
+#include <tvm/data_layout.h>
 
 #include <torch/csrc/autograd/record_function.h>
 #include <torch/csrc/jit/custom_operator.h>
@@ -34,6 +35,33 @@ const tvm::relay::TensorTypeNode getExprType(const tvm::relay::Expr& input) {
   return *checked_type;
 }
 
+template <typename T>
+T relayToConstant(tvm::relay::Expr e) {
+  auto c = e.as<tvm::relay::ConstantNode>();
+  TORCH_INTERNAL_ASSERT(c);
+  TORCH_INTERNAL_ASSERT(c->is_scalar());
+  // TODO: Better error handling on checking if T is same as
+  // c->data->dtype. Unfortunately DLDataType is enum of
+  // int, uint and float.
+  return static_cast<T*>(c->data->data)[0];
+}
+
+bool isConstant(tvm::relay::Expr e) {
+  auto c = e.as<tvm::relay::ConstantNode>();
+  return !!c;
+}
+
+template <typename T>
+tvm::Array<T> relayToArray(tvm::relay::Expr e) {
+  auto t = e.as<tvm::relay::TupleNode>();
+  tvm::Array<T> elems;
+  for (auto c : t->fields) {
+    int elem = relayToConstant<int>(c);
+    elems.push_back(elem);
+  }
+  return elems;
+}
+
 tvm::relay::Expr getCustomDense(tvm::relay::Expr data, tvm::relay::Expr weight) {
   auto weight_pack_attrs = tvm::make_node<tvm::relay::WeightPackAttrs>();
   const auto weight_type = getExprType(weight);
@@ -54,6 +82,69 @@ tvm::relay::Expr getCustomDense(tvm::relay::Expr data, tvm::relay::Expr weight) 
       {});
 
   return out;
+}
+
+tvm::relay::Expr insertInt8WeightTransform(tvm::relay::Expr weight) {
+  tvm::Layout src_layout("NK");
+  tvm::Layout dst_layout("NK16n4k");
+  auto& transform_op = tvm::relay::Op::Get("layout_transform");
+  auto attrs = tvm::make_node<tvm::relay::LayoutTransformAttrs>();
+  attrs->src_layout = src_layout.name();
+  attrs->dst_layout = dst_layout.name();
+  return tvm::relay::CallNode::make(transform_op, {weight}, tvm::Attrs{attrs});
+}
+
+tvm::relay::Expr lowerFbgemmLinearInt8Acc32FP32(tvm::Array<tvm::relay::Expr> inputs) {
+  // inputs[0]: data_fp32
+  // inputs[1]: weight_int8
+  // inputs[2]: packed_weight
+  // inputs[3]: weight_acc
+  // inputs[4]: weight_scale
+  // inputs[5]: weight_zp
+  // inputs[6]: bias
+  TORCH_CHECK(
+      inputs.size() == 7, "Given input size from quantized linear", inputs.size(), " inputs");
+  auto op_find_minmax = tvm::relay::Op::Get("nn.quantize_findminmax");
+  auto op_choose_q_params = tvm::relay::Op::Get("nn.choose_quantize_params");
+  auto op_data_q = tvm::relay::Op::Get("nn.quantize_data_int8_quantize");
+  auto op_data_deq = tvm::relay::Op::Get("nn.quantize_data_mm_dequantize");
+
+  auto min_max_call = tvm::relay::CallNode::make(op_find_minmax, {inputs[0]}, tvm::Attrs(), {});
+  const tvm::relay::Expr& data_min = tvm::relay::TupleGetItemNode::make(min_max_call, 0);
+  const tvm::relay::Expr& data_max = tvm::relay::TupleGetItemNode::make(min_max_call, 1);
+
+  auto scheme_attrs = tvm::make_node<tvm::relay::QuantizeSchemeAttrs>();
+  scheme_attrs->precision = 8;
+  scheme_attrs->is_signed = false;
+
+  auto q_params = tvm::relay::CallNode::make(op_choose_q_params, {data_min, data_max}, tvm::Attrs(scheme_attrs), {});
+  const tvm::relay::Expr& data_zp = tvm::relay::TupleGetItemNode::make(q_params, 0);
+  const tvm::relay::Expr& data_scale = tvm::relay::TupleGetItemNode::make(q_params, 1);
+
+  // data, zero_point, scale
+  auto q_data_call = tvm::relay::CallNode::make(op_data_q, {inputs[0], data_zp, data_scale},
+                                                tvm::Attrs(scheme_attrs), {});
+
+  const tvm::relay::Expr& q_data = tvm::relay::TupleGetItemNode::make(q_data_call, 0);
+  const tvm::relay::Expr& q_data_acc = tvm::relay::TupleGetItemNode::make(q_data_call, 1);
+
+  tvm::relay::Expr packed_weight = insertInt8WeightTransform(inputs[1]);
+  const auto weight_type = getExprType(inputs[1]);
+  auto weight_shape = weight_type.shape;
+  int N = (weight_shape[0].as<tvm::IntImm>())->value;
+
+  tvm::Array<tvm::relay::Expr> deq_inputs = {q_data, packed_weight, inputs[3], q_data_acc, data_scale, data_zp};
+
+  auto params_attrs = tvm::make_node<tvm::relay::QuantizedParamsAttrs>();
+  params_attrs->w_scale= static_cast<double>(relayToConstant<float>(inputs[4]));
+  params_attrs->w_zp = relayToConstant<int>(inputs[5]);
+  params_attrs->N = N;
+
+  auto mm = tvm::relay::CallNode::make(op_data_deq, deq_inputs, tvm::Attrs(params_attrs), {});
+  auto bias_add_op = tvm::relay::Op::Get("nn.bias_add");
+  auto bias_add_attrs = tvm::make_node<tvm::relay::BiasAddAttrs>();
+  bias_add_attrs->axis = 1;
+  return tvm::relay::CallNode::make(bias_add_op, {mm, inputs[6]}, tvm::Attrs(bias_add_attrs), {});
 }
 
 tvm::relay::Expr lowerLinear(tvm::Array<tvm::relay::Expr> inputs) {
@@ -118,6 +209,24 @@ tvm::relay::Expr lowerLinear(tvm::Array<tvm::relay::Expr> inputs) {
   }
   return out;
 }
+
+tvm::relay::Call insertDims(const tvm::relay::Expr& in, int64_t input_dims,
+    int64_t num_dims_to_add) {
+  auto expand_dims = tvm::relay::Op::Get("expand_dims");
+  auto attrs = tvm::make_node<tvm::relay::ExpandDimsAttrs>();
+  attrs->axis = input_dims;
+  attrs->num_newaxis = num_dims_to_add;
+  return tvm::relay::CallNode::make(expand_dims, {in}, tvm::Attrs(attrs), {});
+}
+
+tvm::relay::Call squeezeSingleDim(const tvm::relay::Expr& in,
+    int32_t dim_to_squeeze) {
+  auto squeeze = tvm::relay::Op::Get("squeeze");
+  auto attrs = tvm::make_node<tvm::relay::SqueezeAttrs>();
+  attrs->axis = {dim_to_squeeze};
+  return tvm::relay::CallNode::make(squeeze, {in}, tvm::Attrs(attrs), {});
+}
+
 } // namespace
 
 std::unordered_map<std::string, TVMScheduleFunctor>& getTVMScheduleMap() {
@@ -201,22 +310,6 @@ void registerSchedule(std::string name) {
   }
 }
 
-bool isConstant(tvm::relay::Expr e) {
-  auto c = e.as<tvm::relay::ConstantNode>();
-  return !!c;
-}
-
-template <typename T>
-T relayToConstant(tvm::relay::Expr e) {
-  auto c = e.as<tvm::relay::ConstantNode>();
-  TORCH_INTERNAL_ASSERT(c);
-  TORCH_INTERNAL_ASSERT(c->is_scalar());
-  // TODO: Better error handling on checking if T is same as
-  // c->data->dtype. Unfortunately DLDataType is enum of
-  // int, uint and float.
-  return static_cast<T*>(c->data->data)[0];
-}
-
 bool relayIsNone(tvm::relay::Expr e) {
   if (!isConstant(e)) {
     return false;
@@ -231,34 +324,6 @@ bool relayIsNone(tvm::relay::Expr e) {
 
 uint64_t getNoneSentinel() {
   return 0xe4fa3adecabcf036;
-}
-
-tvm::relay::Call insertDims(const tvm::relay::Expr& in, int64_t input_dims,
-    int64_t num_dims_to_add) {
-  auto expand_dims = tvm::relay::Op::Get("expand_dims");
-  auto attrs = tvm::make_node<tvm::relay::ExpandDimsAttrs>();
-  attrs->axis = input_dims;
-  attrs->num_newaxis = num_dims_to_add;
-  return tvm::relay::CallNode::make(expand_dims, {in}, tvm::Attrs(attrs), {});
-}
-
-tvm::relay::Call squeezeSingleDim(const tvm::relay::Expr& in,
-    int32_t dim_to_squeeze) {
-  auto squeeze = tvm::relay::Op::Get("squeeze");
-  auto attrs = tvm::make_node<tvm::relay::SqueezeAttrs>();
-  attrs->axis = {dim_to_squeeze};
-  return tvm::relay::CallNode::make(squeeze, {in}, tvm::Attrs(attrs), {});
-}
-
-template <typename T>
-tvm::Array<T> relayToArray(tvm::relay::Expr e) {
-  auto t = e.as<tvm::relay::TupleNode>();
-  tvm::Array<T> elems;
-  for (auto c : t->fields) {
-    int elem = relayToConstant<int>(c);
-    elems.push_back(elem);
-  }
-  return elems;
 }
 
 RegisterTVMOperatorSchedule::RegisterTVMOperatorSchedule(
@@ -522,51 +587,9 @@ RegisterTVMOperator reg({
      }},
     {Symbol::fromQualString("aten::fbgemm_linear_int8_weight_fp32_activation"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
-       // inputs[0]: data_fp32
-       // inputs[1]: weight_int8
-       // inputs[2]: packed_weight
-       // inputs[3]: weight_acc
-       // inputs[4]: weight_scale
-       // inputs[5]: weight_zp
-       // inputs[6]: bias
-       TORCH_CHECK(
-           inputs.size() == 7, "Given input size from quantized linear", inputs.size(), " inputs");
-       auto op_find_minmax = tvm::relay::Op::Get("nn.quantize_findminmax");
-       auto op_choose_q_params = tvm::relay::Op::Get("nn.choose_quantize_params");
-       auto op_data_q = tvm::relay::Op::Get("nn.quantize_data_int8_quantize");
-       auto op_data_deq = tvm::relay::Op::Get("nn.quantize_data_mm_dequantize");
-
-       auto min_max_call = tvm::relay::CallNode::make(op_find_minmax, {inputs[0]}, tvm::Attrs(), {});
-       const tvm::relay::Expr& data_min = tvm::relay::TupleGetItemNode::make(min_max_call, 0);
-       const tvm::relay::Expr& data_max = tvm::relay::TupleGetItemNode::make(min_max_call, 1);
-
-       auto scheme_attrs = tvm::make_node<tvm::relay::QuantizeSchemeAttrs>();
-       scheme_attrs->precision = 8;
-       scheme_attrs->is_signed = false;
-
-       auto q_params = tvm::relay::CallNode::make(op_choose_q_params, {data_min, data_max}, tvm::Attrs(scheme_attrs), {});
-       const tvm::relay::Expr& data_zp = tvm::relay::TupleGetItemNode::make(q_params, 0);
-       const tvm::relay::Expr& data_scale = tvm::relay::TupleGetItemNode::make(q_params, 1);
-
-       // data, zero_point, scale
-       auto q_data_call = tvm::relay::CallNode::make(op_data_q, {inputs[0], data_zp, data_scale},
-                                                     tvm::Attrs(scheme_attrs), {});
-
-       const tvm::relay::Expr& q_data = tvm::relay::TupleGetItemNode::make(q_data_call, 0);
-       const tvm::relay::Expr& q_data_acc = tvm::relay::TupleGetItemNode::make(q_data_call, 1);
-
-       tvm::Array<tvm::relay::Expr> deq_inputs = {q_data, inputs[1], inputs[3], q_data_acc, data_scale, data_zp};
-
-       auto params_attrs = tvm::make_node<tvm::relay::QuantizedParamsAttrs>();
-       params_attrs->w_scale= static_cast<double>(relayToConstant<float>(inputs[4]));
-       params_attrs->w_zp = relayToConstant<int>(inputs[5]);
-
-       auto mm = tvm::relay::CallNode::make(op_data_deq, deq_inputs, tvm::Attrs(params_attrs), {});
-       auto bias_add_op = tvm::relay::Op::Get("nn.bias_add");
-       auto bias_add_attrs = tvm::make_node<tvm::relay::BiasAddAttrs>();
-       bias_add_attrs->axis = 1;
-       return tvm::relay::CallNode::make(bias_add_op, {mm, inputs[6]}, tvm::Attrs(bias_add_attrs), {});
-     }},
+       return lowerFbgemmLinearInt8Acc32FP32(inputs);
+     },
+     "", PARAM_INDICES(quantized_linear)},
     {Symbol::fromQualString("aten::relu_"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("nn.relu");

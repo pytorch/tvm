@@ -340,10 +340,10 @@ class TestOperators(TVMTest):
             torch.fbgemm_linear_quantize_weight(weight.clone().float())
         packed_weight = torch.fbgemm_pack_quantized_matrix(q_weight.clone())
 
-        def fbgemm_quantized_linear(input, weight, bias):
+        def fbgemm_quantized_linear(input, weight, bias, col_offsets):
             return torch.fbgemm_linear_int8_weight_fp32_activation(
-                input.float(), q_weight, packed_weight, col_offsets, scale, zero_point, bias.float())
-        ref_out, tvm_out = self.runBoth(fbgemm_quantized_linear, input, weight, bias)
+                input.float(), weight, packed_weight, col_offsets, scale, zero_point, bias.float())
+        ref_out, tvm_out = self.runBoth(fbgemm_quantized_linear, input, weight, bias, col_offsets)
         # relax the constraint to avoid flaky test
         assert torch.allclose(ref_out, tvm_out, rtol=0.5, atol=0.5)
 
