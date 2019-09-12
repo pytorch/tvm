@@ -21,6 +21,11 @@ Expr MakeDataInt8Quantization(Expr data, Expr zero_point, Expr scale, bool is_si
   return CallNode::make(op, {data, zero_point, scale}, Attrs(attrs), {});
 }
 
+Expr MakeDataInt8RowOffset(Expr quantized_data) {
+  static const Op& op = Op::Get("nn.quantize_data_int8_row_offset");
+  return CallNode::make(op, {quantized_data}, Attrs(), {});
+}
+
 bool DataInt8QuantizationRel(const Array<Type>& types,
                              int num_inputs,
                              const Attrs& attrs,
@@ -39,10 +44,22 @@ bool DataInt8QuantizationRel(const Array<Type>& types,
   } else {
     out_dtype = UInt(param->precision);
   }
-  std::vector<Type> fields;
-  fields.push_back(TensorTypeNode::make(oshape, out_dtype));
-  fields.push_back(TensorTypeNode::make(acc_oshape, Int(32)));
-  reporter->Assign(types[3], TupleTypeNode::make(Array<Type>(fields)));
+  reporter->Assign(types[3], TensorTypeNode::make(oshape, out_dtype));
+  return true;
+}
+
+bool DataInt8RowOffsetRel(const Array<Type>& types,
+                             int num_inputs,
+                             const Attrs& attrs,
+                             const TypeReporter& reporter) {
+  // todo: add axis to decide which dim to do the accumulation
+  CHECK_EQ(types.size(), 2);
+  const auto* data = types[0].as<TensorTypeNode>();
+  // unchnaged shape
+  Array<tvm::Expr> oshape = data->shape;
+  Array<tvm::Expr> acc_oshape = {oshape[0]};
+
+  reporter->Assign(types[1], TensorTypeNode::make(acc_oshape, Int(32)));
   return true;
 }
 

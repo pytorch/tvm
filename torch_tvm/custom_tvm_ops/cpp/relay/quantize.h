@@ -23,6 +23,14 @@ bool DataInt8QuantizationRel(
     const Attrs& attrs,
     const TypeReporter& reporter);
 
+Expr MakeDataInt8RowOffset(Expr data);
+
+bool DataInt8RowOffsetRel(
+    const Array<Type>& types,
+    int num_inputs,
+    const Attrs& attrs,
+    const TypeReporter& reporter);
+
 Expr MakeFindMinMax(Expr data);
 
 bool FindMinMaxRel(

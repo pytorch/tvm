@@ -32,3 +32,32 @@ def schedule_quantized_mm_dequantize(attrs, outs, target):
         return quantized_linear_int8.schedule_quantized_mm_dequantize(outs)
 
 
+@reg.register_compute("nn.quantize_data_int8_quantize")
+def compute_data_int8_quantize(attrs, inputs, out_type, target):
+    data = inputs[0]
+    zero_point = inputs[1]
+    scale = inputs[2]
+    precision = attrs.precision
+    is_signed = attrs.is_signed
+    out = quantized_linear_int8.data_int8_quantize(data, zero_point, \
+            scale, is_signed, precision, out_type.dtype)
+    return [out]
+
+
+@reg.register_schedule("nn.quantize_data_int8_quantize")
+def schedule_quantized_mm_dequantize(attrs, outs, target):
+    with target:
+        return quantized_linear_int8.schedule_data_int8_quantize(outs)
+
+
+@reg.register_compute("nn.quantize_data_int8_row_offset")
+def compute_data_int8_row_offset(attrs, inputs, out_type, target):
+    data = inputs[0]
+    out = quantized_linear_int8.data_int8_row_offset(data, out_type.dtype)
+    return [out]
+
+
+@reg.register_schedule("nn.quantize_data_int8_row_offset")
+def schedule_quantized_mm_dequantize(attrs, outs, target):
+    with target:
+        return quantized_linear_int8.schedule_data_int8_row_offset(outs)

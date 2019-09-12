@@ -14,6 +14,8 @@ Array<Tensor> data_int8_quantize(
     bool is_signed,
     int precision);
 
+Array<Tensor> data_int8_row_offset(const Tensor& quantized_data);
+
 Array<Tensor> data_int8_mm_dequantize(
     const Tensor& data,
     const Tensor& weight,

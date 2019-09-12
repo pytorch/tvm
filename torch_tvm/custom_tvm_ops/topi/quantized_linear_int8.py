@@ -17,6 +17,22 @@ def quantized_mm_dequantize(data, weight, weight_acc, data_acc, data_scale, \
             data_zero_point, weight_scale, weight_zero_point, N)[0]
 
 
+@tvm.target.generic_func
+def data_int8_quantize(data, zero_point, scale, is_signed, precision, \
+        out_dtype=None):
+    data_int8_quantize_fn = \
+            tvm.get_global_func("nn.compute_data_int8_quantize")
+    return data_int8_quantize_fn(data, zero_point, scale, is_signed, \
+            precision)[0]
+
+
+@tvm.target.generic_func
+def data_int8_row_offset(data, out_dtype=None):
+    data_int8_row_offset_fn = \
+            tvm.get_global_func("nn.compute_data_int8_row_offset")
+    return data_int8_row_offset_fn(data)[0]
+
+
 # The reason to have to register_topi_compute at all is due to the fact that
 # "workload" attr is annotated only during this decorator. We need "workload"
 # attr for register_topi_schedule which is inturn needed to be able to autotune.
@@ -34,9 +50,47 @@ def _quantized_mm_dequantize_dummy(cfg, data, weight, weight_acc, data_acc, \
             data_zero_point, weight_scale, weight_zero_point, N)[0]
 
 
+@autotvm.register_topi_compute(data_int8_quantize, 'cpu', ['direct'])
+def _data_int8_quantize_template(cfg, data, zero_point, scale, is_signed, precision, \
+        out_dtype=None):
+    data_int8_quantize_fn = \
+            tvm.get_global_func("nn.compute_data_int8_quantize")
+    return data_int8_quantize_fn(data, zero_point, scale, is_signed, \
+            precision)[0]
+
+
+@autotvm.register_topi_compute(data_int8_row_offset, 'cpu', ['direct'])
+def _data_int8_row_offset_template(cfg, data, out_dtype=None):
+    data_int8_row_offset_fn = \
+            tvm.get_global_func("nn.compute_data_int8_row_offset")
+    return data_int8_row_offset_fn(data)[0]
+
+
+@tvm.target.generic_func
+def schedule_data_int8_quantize(outs):
+    return nn._default_schedule(outs, True)
+
+
+@autotvm.register_topi_schedule(schedule_data_int8_quantize, 'cpu', ['direct'])
+def _schedule_data_int8_quantize(cfg, outs):
+    s = tvm.create_schedule([x.op for x in outs])
+    return s
+
+
+@tvm.target.generic_func
+def schedule_data_int8_row_offset(outs):
+    return nn._default_schedule(outs, True)
+
+
+@autotvm.register_topi_schedule(schedule_data_int8_row_offset, 'cpu', ['direct'])
+def _schedule_data_int8_row_offset(cfg, outs):
+    s = tvm.create_schedule([x.op for x in outs])
+    return s
+
+
 @tvm.target.generic_func
 def schedule_quantized_mm_dequantize(outs):
-    return nn._default_schedule(outs, False)
+    return nn._default_schedule(outs, True)
 
 
 @autotvm.register_topi_schedule(schedule_quantized_mm_dequantize, 'cpu', ['direct'])

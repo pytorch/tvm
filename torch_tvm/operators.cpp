@@ -107,6 +107,7 @@ tvm::relay::Expr lowerFbgemmLinearInt8Acc32FP32(tvm::Array<tvm::relay::Expr> inp
   auto op_find_minmax = tvm::relay::Op::Get("nn.quantize_findminmax");
   auto op_choose_q_params = tvm::relay::Op::Get("nn.choose_quantize_params");
   auto op_data_q = tvm::relay::Op::Get("nn.quantize_data_int8_quantize");
+  auto op_data_row_offset = tvm::relay::Op::Get("nn.quantize_data_int8_row_offset");
   auto op_data_deq = tvm::relay::Op::Get("nn.quantize_data_mm_dequantize");
 
   auto min_max_call = tvm::relay::CallNode::make(op_find_minmax, {inputs[0]}, tvm::Attrs(), {});
@@ -122,18 +123,18 @@ tvm::relay::Expr lowerFbgemmLinearInt8Acc32FP32(tvm::Array<tvm::relay::Expr> inp
   const tvm::relay::Expr& data_scale = tvm::relay::TupleGetItemNode::make(q_params, 1);
 
   // data, zero_point, scale
-  auto q_data_call = tvm::relay::CallNode::make(op_data_q, {inputs[0], data_zp, data_scale},
+  auto q_data = tvm::relay::CallNode::make(op_data_q, {inputs[0], data_zp, data_scale},
                                                 tvm::Attrs(scheme_attrs), {});
-
-  const tvm::relay::Expr& q_data = tvm::relay::TupleGetItemNode::make(q_data_call, 0);
-  const tvm::relay::Expr& q_data_acc = tvm::relay::TupleGetItemNode::make(q_data_call, 1);
+  auto q_data_row_offset = tvm::relay::CallNode::make(op_data_row_offset,
+      {q_data}, tvm::Attrs(), {});
 
   tvm::relay::Expr packed_weight = insertInt8WeightTransform(inputs[1]);
   const auto weight_type = getExprType(inputs[1]);
   auto weight_shape = weight_type.shape;
   int N = (weight_shape[0].as<tvm::IntImm>())->value;
 
-  tvm::Array<tvm::relay::Expr> deq_inputs = {q_data, packed_weight, inputs[3], q_data_acc, data_scale, data_zp};
+  tvm::Array<tvm::relay::Expr> deq_inputs = {q_data, packed_weight, inputs[3],
+    q_data_row_offset, data_scale, data_zp};
 
   auto params_attrs = tvm::make_node<tvm::relay::QuantizedParamsAttrs>();
   params_attrs->w_scale= static_cast<double>(relayToConstant<float>(inputs[4]));

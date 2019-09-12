@@ -35,17 +35,23 @@ Array<Tensor> data_int8_quantize(
       "tensor",
       "int8_quantize"
       );
-  auto k = tvm::reduce_axis(Range(0, data->shape[1]), "k");
+
+  return {clamp_output};
+}
+
+Array<Tensor> data_int8_row_offset(const Tensor& quantized_data) {
+
+  auto k = tvm::reduce_axis(Range(0, quantized_data->shape[1]), "k");
   auto data_acc = tvm::compute(
-      {data->shape[0]},
+      {quantized_data->shape[0]},
       [&](Var i) {
-          return tvm::sum(tvm::cast(Int(32), clamp_output(i, k)), {k});
+          return tvm::sum(tvm::cast(Int(32), quantized_data(i, k)), {k});
       },
       "tensor",
       "int8_quantize_acc"
       );
 
-  return {clamp_output, data_acc};
+  return {data_acc};
 }
 
 Array<Tensor> data_int8_mm_dequantize(

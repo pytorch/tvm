@@ -44,6 +44,16 @@ inline Schedule schedule_quantize_data_int8_quantize(
   return s;
 }
 
+inline Schedule schedule_quantize_data_int8_row_offset(
+    const Array<Tensor>& outs) {
+  Array<Operation> out_ops;
+  for (auto out : outs) {
+    out_ops.push_back(out->op);
+  }
+  auto s = create_schedule(out_ops);
+  return s;
+}
+
 inline Schedule schedule_quantize_data_mm_dequantize(
     const Array<Tensor>& outs) {
   Array<Operation> out_ops;
