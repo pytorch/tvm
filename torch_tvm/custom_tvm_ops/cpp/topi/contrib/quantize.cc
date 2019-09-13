@@ -20,18 +20,31 @@ TVM_REGISTER_GLOBAL("tvm.contrib.find_minmax")
       CHECK(input->ndim == 2) << "find_minmax only support the two dimenstion input";
       int m = input->shape[0];
       int n = input->shape[1];
-      float d_min = data_ptr[0];
-      float d_max = data_ptr[0];
+      int num_els = m * n;
+      int num_iters = num_els / 16;
+      int num_left_overs = num_els % 16;
+      float min_v[16] = {0.f};
+      float max_v[16] = {0.f};
       for (int i = 0; i < m; i++) {
-        for (int j = 0; j < n; j++) {
-            d_min = std::min(data_ptr[i*n + j], d_min);
-            d_max = std::max(data_ptr[i*n + j], d_max);
+        for (int j = 0; j < 16; j++) {
+            min_v[j] = std::min(data_ptr[i*16 + j], min_v[j]);
+            max_v[j] = std::max(data_ptr[i*16 + j], max_v[j]);
         }
+      }
+      float min_value = min_v[0];
+      float max_value = max_v[0];
+      for (int i =0; i < 16; ++i) {
+          min_value = std::min(min_v[i], min_value);
+          max_value = std::max(max_v[i], max_value);
+      }
+      for (int i = (num_iters*16); i < (num_iters*16+num_left_overs); ++i) {
+          min_value = std::min(data_ptr[i], min_value);
+          max_value = std::max(data_ptr[i], max_value);
       }
       auto out_ptr_min = static_cast<float *>(data_min->data);
       auto out_ptr_max = static_cast<float *>(data_max->data);
-      *out_ptr_min =  d_min;
-      *out_ptr_max =  d_max;
+      *out_ptr_min =  min_value;
+      *out_ptr_max =  max_value;
     });
 
 TVM_REGISTER_GLOBAL("tvm.contrib.choose_quantize_params")
