@@ -21,19 +21,20 @@ Array<Tensor> data_int8_quantize(
   auto q_min = is_signed ? -(1 << (precision - 1)) : 0;
   auto q_max = is_signed ? ((1 << (precision - 1)) - 1) : (1 << precision) - 1;
   auto target_type = is_signed ? Int(8) : UInt(8);
+  auto inverse_scale = 1 /scale(0);
 
   auto clamp_output = tvm::compute(
       data->shape,
       [&](Var i, Var j) {
          return tvm::cast(target_type,
             tvm::min(
-               tvm::max(tvm::cast(Float(32), zero_point(0)) + data(i, j)/scale(0), q_min),
+               tvm::max(tvm::cast(Float(32), zero_point(0)) + data(i, j)*inverse_scale, q_min),
                q_max
             )
          );
       },
       "tensor",
-      "int8_quantize"
+      "int8_quantize_data"
       );
 
   return {clamp_output};
@@ -48,7 +49,7 @@ Array<Tensor> data_int8_row_offset(const Tensor& quantized_data) {
           return tvm::sum(tvm::cast(Int(32), quantized_data(i, k)), {k});
       },
       "tensor",
-      "int8_quantize_acc"
+      "int8_quantize_row_offset"
       );
 
   return {data_acc};

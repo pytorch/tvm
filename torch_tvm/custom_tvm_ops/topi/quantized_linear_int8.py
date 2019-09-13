@@ -7,6 +7,10 @@ from topi.nn.pad import pad
 from topi.util import simplify, get_const_tuple
 from topi.generic import nn
 from topi import tag
+from topi.x86.tensor_intrin import dot_16x1x16_int8_int8_int32
+
+from enum import Enum
+AVXType = Enum('AVXType', 'AVX2 AVX512 None')
 
 @tvm.target.generic_func
 def quantized_mm_dequantize(data, weight, weight_acc, data_acc, data_scale, \
@@ -127,9 +131,19 @@ def _schedule_mm_dequantize(cfg, s, C):
 
 
 def _schedule_quantized_mm(cfg, s, QGEMM):
+    options = tvm.target.current_target().options_array
+    avx_type = None
+    for option in options:
+        if option == "-mcpu=skylake-avx512":
+            avx_type = AVXType.AVX512
+        if option == "-mcpu=core-avx2":
+            avx_type = AVXType.AVX2
     x, y = s[QGEMM].op.axis
     k, = s[QGEMM].op.reduce_axis
     yo, yi = s[QGEMM].split(y, factor=16)
     ko, ki = s[QGEMM].split(k, factor=4)
     s[QGEMM].reorder(yo, ko, x, yi, ki)
     s[QGEMM].unroll(x)
+    if avx_type == AVXType.AVX512:
+        pc = dot_16x1x16_int8_int8_int32()
+        s[QGEMM].tensorize(yi, pc)
