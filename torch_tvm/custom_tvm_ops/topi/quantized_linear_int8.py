@@ -138,12 +138,12 @@ def _schedule_quantized_mm(cfg, s, QGEMM):
             avx_type = AVXType.AVX512
         if option == "-mcpu=core-avx2":
             avx_type = AVXType.AVX2
-    x, y = s[QGEMM].op.axis
+    y, x = s[QGEMM].op.axis
     k, = s[QGEMM].op.reduce_axis
-    yo, yi = s[QGEMM].split(y, factor=16)
+    xo, xi = s[QGEMM].split(x, factor=16)
     ko, ki = s[QGEMM].split(k, factor=4)
-    s[QGEMM].reorder(yo, ko, x, yi, ki)
-    s[QGEMM].unroll(x)
+    s[QGEMM].reorder(xo, ko, y, xi, ki)
+    s[QGEMM].unroll(y)
     if avx_type == AVXType.AVX512:
         pc = dot_16x1x16_int8_int8_int32()
-        s[QGEMM].tensorize(yi, pc)
+        s[QGEMM].tensorize(xi, pc)
