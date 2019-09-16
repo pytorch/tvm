@@ -27,7 +27,7 @@ using TVMScheduleFunctor = std::function<const tvm::runtime::PackedFunc*()>;
 struct TVMOpMap {
   TVMOpMap(torch::jit::Symbol sym_, TVMOpFunctor fn_, std::string name_ = ""
       ,std::vector<int32_t> param_indices_={})
-      : sym(sym_), fn(fn_), name(name_), param_indices(param_indices_){}
+      : sym(sym_), fn(fn_), param_indices(param_indices_), name(name_) {}
 
   torch::jit::Symbol sym;
   TVMOpFunctor fn;

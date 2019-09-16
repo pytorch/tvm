@@ -57,7 +57,7 @@ bool FindMinMaxRel(const Array<Type>& types,
                    const TypeReporter& reporter) {
     CHECK_EQ(types.size(), 2);
     const auto* data = types[0].as<TensorTypeNode>();
-    std::vector<IndexExpr> oshape({1});
+    std::vector<IndexExpr> oshape(1);
     std::vector<Type> fields;
     fields.push_back(TensorTypeNode::make(oshape, data->dtype));
     fields.push_back(TensorTypeNode::make(oshape, data->dtype));
@@ -110,7 +110,7 @@ bool ChooseQuantizeParamsRel(const Array<Type>& types,
                              const TypeReporter& reporter) {
     CHECK_EQ(types.size(), 3);
     const auto* data = types[0].as<TensorTypeNode>();
-    std::vector<IndexExpr> oshape({1});
+    std::vector<IndexExpr> oshape(1);
     std::vector<Type> fields;
     fields.push_back(TensorTypeNode::make(oshape, Int(32)));
     fields.push_back(TensorTypeNode::make(oshape, data->dtype));

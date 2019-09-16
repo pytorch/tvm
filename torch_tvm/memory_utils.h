@@ -19,9 +19,9 @@ struct DLManagedTensorDeleter {
     if (dl_tensor.data) {
       TORCH_CHECK((dl_tensor.shape && dl_tensor.strides), "If DLTensor's data"
           " pointer is valid then shape and strides must be as well.")
-      delete dl_tensor.data;
-      delete dl_tensor.shape;
-      delete dl_tensor.strides;
+      std::free(dl_tensor.data);
+      delete[] dl_tensor.shape;
+      delete[] dl_tensor.strides;
     }
     delete manager_ctx;
   }
