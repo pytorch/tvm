@@ -12,7 +12,6 @@ bool isAligned(void* data_ptr, std::uintptr_t alignment_in_bytes) {
 }
 
 DLManagedTensor* allocAndCopyData(const at::Tensor& tensor) {
-
   DLManagedTensor* dl_managed_tensor = new DLManagedTensor();
   auto contig_tensor = tensor;
   if (!tensor.is_contiguous()) {
@@ -43,12 +42,18 @@ DLManagedTensor* allocAndCopyData(const at::Tensor& tensor) {
     dl_tensor.shape[i] = tensor_sizes[i];
     dl_tensor.strides[i] = tensor_strides[i];
   }
-  dl_tensor.data = aligned_alloc(tvm::runtime::kAllocAlignment,
-      contig_tensor.nbytes());
+
+  // make sure the allocated size is a multiple of alignment
+  auto nbytes_alloc = contig_tensor.nbytes();
+  auto rem = nbytes_alloc % tvm::runtime::kAllocAlignment;
+  if (rem > 0) {
+    nbytes_alloc += tvm::runtime::kAllocAlignment - rem;
+  }
+  dl_tensor.data = aligned_alloc(tvm::runtime::kAllocAlignment, nbytes_alloc);
   TORCH_CHECK(dl_tensor.data != nullptr,
       "Memory allocation failed for DLTensor data by ManagedTensors.");
 
-  std::memcpy (dl_tensor.data, contig_tensor.data_ptr(), contig_tensor.nbytes());
+  std::memcpy(dl_tensor.data, contig_tensor.data_ptr(), contig_tensor.nbytes());
   dl_tensor.byte_offset = 0;
 
   return dl_managed_tensor;

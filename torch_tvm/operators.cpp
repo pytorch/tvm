@@ -142,7 +142,7 @@ RegisterTVMOperator::RegisterTVMOperator(std::vector<TVMOpMap> ops) {
 
         // NB: We assume all relay ops are pure
         auto options = c10::OperatorOptions();
-        options.setAliasAnalysis(AliasAnalysisKind::PURE);
+        options.setAliasAnalysis(AliasAnalysisKind::PURE_FUNCTION);
 	      // TODO: Pass in operator options somehow
         auto torch_operator = Operator(
             FunctionSchema(

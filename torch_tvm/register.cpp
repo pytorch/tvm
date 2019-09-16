@@ -31,7 +31,7 @@ static size_t relay_exprs_uuid = 0;
 PYBIND11_MODULE(_torch_tvm, m) {
   // Register the tvm::CompilationGroup operator
   auto options = c10::OperatorOptions();
-  options.setAliasAnalysis(AliasAnalysisKind::PURE);
+  options.setAliasAnalysis(AliasAnalysisKind::PURE_FUNCTION);
   RegisterOperators op({Operator(
       getTVMSymbol(),
       [](const Node* node) {
