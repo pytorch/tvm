@@ -13,6 +13,7 @@ void layer_norm_sched(tvm::Schedule& s, const tvm::Tensor& out) {
   auto divide_1 = out->op.as<tvm::ComputeOpNode>()->InputTensors()[1];
   auto divide_2 = out->op.as<tvm::ComputeOpNode>()->InputTensors()[2];
   auto mean_var_sum = divide_1->op.as<tvm::ComputeOpNode>()->InputTensors()[0];
+  auto squared_data = mean_var_sum->op.as<tvm::ComputeOpNode>()->InputTensors()[1];
   s[divide_1].compute_inline();
   s[divide_2].compute_inline();
   auto k = s[mean_var_sum]->op.as<tvm::ComputeOpNode>()->reduce_axis;
@@ -22,6 +23,7 @@ void layer_norm_sched(tvm::Schedule& s, const tvm::Tensor& out) {
   s[mean_var_sum].compute_at(s[out], out->op.as<tvm::ComputeOpNode>()->axis[0]);
   s[factored_tensors[0]].compute_at(s[out],
       out->op.as<tvm::ComputeOpNode>()->axis[0]);
+  s[squared_data].compute_inline();
 }
 } // namespace
 

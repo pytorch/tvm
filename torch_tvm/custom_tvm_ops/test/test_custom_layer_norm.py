@@ -48,12 +48,14 @@ class CustomLayerNormUtils(object):
         divide_1 = output_tensor.op.input_tensors[1]
         divide_2 = output_tensor.op.input_tensors[2]
         mean_var_sum = divide_1.op.input_tensors[0]
+        squared_data = mean_var_sum.op.input_tensors[1]
         schedule[divide_1].compute_inline()
         schedule[divide_2].compute_inline()
         ko, ki = schedule[mean_var_sum].split(mean_var_sum.op.reduce_axis[0], factor=8)
         BF = schedule.rfactor(mean_var_sum, ki)
         schedule[mean_var_sum].compute_at(schedule[output_tensor], output_tensor.op.axis[0])
         schedule[BF[0]].compute_at(schedule[output_tensor], output_tensor.op.axis[0])
+        schedule[squared_data].compute_inline()
 
     @staticmethod
     def tvm_layer_norm_via_topi(a, a_out, shape, normalized_axis, \

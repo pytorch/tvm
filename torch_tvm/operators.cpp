@@ -311,7 +311,6 @@ RegisterTVMOperator reg({
        auto out = tvm::relay::CallNode::make(op, add_inputs, tvm::Attrs(), {});
        return out;
      }},
-    /*
     {Symbol::fromQualString("aten::_convolution"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        bool is_transpose = relayToConstant<bool>(inputs[6]);
@@ -399,7 +398,6 @@ RegisterTVMOperator reg({
        return out;
      },
      "", PARAM_INDICES(convolution)},
-                    */
     {Symbol::fromQualString("prim::FusedConcat"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto op = tvm::relay::Op::Get("concatenate");

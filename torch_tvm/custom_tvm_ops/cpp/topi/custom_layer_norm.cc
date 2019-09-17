@@ -31,11 +31,14 @@ inline Array<Tensor> calculate_mean_and_variance(
   auto fcombine = [](Array<Var> lhs, Array<Var> rhs) {
     Array<Expr> result;
     result.push_back(lhs[0] + rhs[0]); // mean
-    result.push_back(lhs[1] + rhs[1] * rhs[1]); // variance
+    result.push_back(lhs[1] + rhs[1]); // variance
     return result;
   };
+  auto squared_data = tvm::compute(data->shape, [&data](const Array<Var>& indices) {
+      return data(indices) * data(indices);
+      }, data->op->name + "_squared");
   auto reducer = MakeCommReducer(fcombine, fidentity, "mean_variance_sum");
-  auto compute = [ndim, &real_axis, &reduce_axes, &reducer, &data](
+  auto compute = [ndim, &real_axis, &reduce_axes, &reducer, &data, &squared_data](
                      const Array<Var>& indices) {
     Array<Expr> eval_range;
     int arg_counter = 0;
@@ -54,7 +57,7 @@ inline Array<Tensor> calculate_mean_and_variance(
         eval_range.push_back(indices[i]);
       }
     }
-    return reducer({data(eval_range), data(eval_range)}, reduce_axes, nullptr);
+    return reducer({data(eval_range), squared_data(eval_range)}, reduce_axes, nullptr);
   };
 
   tvm::relay::IndexExpr num_elements = make_const(data->dtype, 1);
