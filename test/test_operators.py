@@ -331,7 +331,6 @@ class TestOperators(TVMTest):
         shape=TVMTest.rand_shape(rank=2, min_dim=10),
         out_features=TVMTest.rand_int(15, 30),
     )
-    @unittest.skip("https://github.com/pytorch/tvm/issues/114")
     def test_quantized_linear(self, shape, out_features):
         input = torch.rand(shape)
         weight = torch.rand(out_features, shape[1])
