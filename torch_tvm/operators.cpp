@@ -89,6 +89,9 @@ tvm::relay::Expr lowerLinear(tvm::Array<tvm::relay::Expr> inputs) {
   TORCH_CHECK((batch_dim0 == batch_dim1),
       "Input and weight must have same value in batch dim.");
 
+  //TODO: Right now custom dense is only supported for cpu target.
+  //Any other target will likely break, e.g. arm_cpu.
+  //Future fix.
   tvm::relay::Expr out;
   out = getCustomDense(reshaped_input, inputs[1]);
 
