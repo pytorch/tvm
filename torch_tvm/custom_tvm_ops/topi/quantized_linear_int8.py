@@ -4,7 +4,7 @@ from tvm.autotvm.task.space import SplitEntity
 
 from topi.nn.util import get_pad_tuple
 from topi.nn.pad import pad
-from topi.util import simplify, get_const_tuple
+from topi.util import simplify, get_const_tuple, get_const_int
 from topi.generic import nn
 from topi import tag
 from topi.x86.tensor_intrin import dot_16x1x16_int8_int8_int32
@@ -141,9 +141,15 @@ def _schedule_quantized_mm(cfg, s, QGEMM):
     y, x = s[QGEMM].op.axis
     k, = s[QGEMM].op.reduce_axis
     xo, xi = s[QGEMM].split(x, factor=16)
-    ko, ki = s[QGEMM].split(k, factor=4)
-    s[QGEMM].reorder(xo, ko, y, xi, ki)
-    s[QGEMM].unroll(y)
-    if avx_type == AVXType.AVX512:
-        pc = dot_16x1x16_int8_int8_int32()
-        s[QGEMM].tensorize(xi, pc)
+    x_dim_size = get_const_int(QGEMM.shape[0])
+    if x_dim_size >= 16:
+        ko, ki = s[QGEMM].split(k, factor=4)
+        s[QGEMM].reorder(xo, ko, y, xi, ki)
+        s[QGEMM].unroll(y)
+        if avx_type == AVXType.AVX512:
+            pc = dot_16x1x16_int8_int8_int32()
+            s[QGEMM].tensorize(xi, pc)
+    else:
+        s[QGEMM].reorder(xo, y, xi)
+        s[QGEMM].unroll(y)
+        s[QGEMM].vectorize(xi)

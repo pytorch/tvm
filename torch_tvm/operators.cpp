@@ -84,9 +84,16 @@ tvm::relay::Expr getCustomDense(tvm::relay::Expr data, tvm::relay::Expr weight) 
   return out;
 }
 
-tvm::relay::Expr insertInt8WeightTransform(tvm::relay::Expr weight) {
+tvm::relay::Expr insertInt8WeightTransform(tvm::relay::Expr weight, const int64_t N) {
+  std::string out_layout;
+  if (N > 16) {
+    TORCH_CHECK(N % 16 == 0, "For weights with dim 0 > 16 it must be multiple of 16, got:", N);
+    out_layout = "NK16n4k";
+  } else {
+    out_layout = "NK" + std::to_string(N) + "n4k";
+  }
   tvm::Layout src_layout("NK");
-  tvm::Layout dst_layout("NK16n4k");
+  tvm::Layout dst_layout(out_layout);
   auto& transform_op = tvm::relay::Op::Get("layout_transform");
   auto attrs = tvm::make_node<tvm::relay::LayoutTransformAttrs>();
   attrs->src_layout = src_layout.name();
@@ -158,7 +165,7 @@ tvm::relay::Expr lowerFbgemmLinearInt8Acc32FP32(tvm::Array<tvm::relay::Expr> inp
   auto weight_shape = weight_type.shape;
   int N = (weight_shape[0].as<tvm::IntImm>())->value;
   int K = (weight_shape[0].as<tvm::IntImm>())->value;
-  tvm::relay::Expr packed_weight = insertInt8WeightTransform(inputs[1]);
+  tvm::relay::Expr packed_weight = insertInt8WeightTransform(inputs[1], N);
 
   tvm::Array<tvm::relay::Expr> deq_inputs = {q_data, packed_weight, inputs[3],
     q_data_row_offset, data_scale, data_zp};
