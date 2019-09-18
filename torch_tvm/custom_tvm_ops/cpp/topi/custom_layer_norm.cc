@@ -90,7 +90,7 @@ inline Tensor custom_layer_norm_impl(
         data(indices) * var_rsqrt - var_rsqrt * mean(mean_variance_indices));
   };
   return tvm::compute(
-      data->shape, layer_norm_compute, data->op->name, data->op->name);
+      data->shape, layer_norm_compute, data->op->name, "custom_layer_norm_tag");
 }
 
 inline Tensor custom_layer_norm_impl_affine(
@@ -127,7 +127,7 @@ inline Tensor custom_layer_norm_impl_affine(
         beta(affine_indices));
   };
   return tvm::compute(
-      data->shape, layer_norm_compute, data->op->name, data->op->name);
+      data->shape, layer_norm_compute, data->op->name, "custom_layer_norm_tag");
 }
 
 Tensor custom_layer_norm(
