@@ -110,7 +110,33 @@ tvm::relay::Expr lowerFbgemmLinearInt8Acc32FP32(tvm::Array<tvm::relay::Expr> inp
   auto op_data_row_offset = tvm::relay::Op::Get("nn.quantize_data_int8_row_offset");
   auto op_data_deq = tvm::relay::Op::Get("nn.quantize_data_mm_dequantize");
 
-  auto min_max_call = tvm::relay::CallNode::make(op_find_minmax, {inputs[0]}, tvm::Attrs(), {});
+  const auto input0_type = getExprType(inputs[0]);
+  const auto input1_type = getExprType(inputs[1]);
+
+  auto shape0 = input0_type.shape;
+  auto shape1 = input1_type.shape;
+  TORCH_CHECK(shape0.size() >= 2, "Input must have at least 2 dims.");
+  TORCH_CHECK(shape1.size() == 2, "Weight input must have 2 dims.");
+  auto reshaped_input = inputs[0];
+  if (shape0.size() > 2) {
+    uint64_t num_elements_to_flatten = 1;
+    int64_t i = 0;
+    for (;i < shape0.size()-1; ++i) {
+      auto d = (shape0[i].as<tvm::IntImm>())->value;
+      num_elements_to_flatten *= d;
+    }
+    auto last_dim = (shape0[i].as<tvm::IntImm>())->value;
+    auto attrs = tvm::make_node<tvm::relay::ReshapeAttrs>();
+    auto& newshape = attrs->newshape;
+    newshape.push_back(tvm::Integer(num_elements_to_flatten));
+    newshape.push_back(tvm::Integer(last_dim));
+    attrs->reverse = false;
+    auto op = tvm::relay::Op::Get("reshape");
+    reshaped_input =
+        tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(attrs), {});
+  }
+
+  auto min_max_call = tvm::relay::CallNode::make(op_find_minmax, {reshaped_input}, tvm::Attrs(), {});
   const tvm::relay::Expr& data_min = tvm::relay::TupleGetItemNode::make(min_max_call, 0);
   const tvm::relay::Expr& data_max = tvm::relay::TupleGetItemNode::make(min_max_call, 1);
 
@@ -123,15 +149,16 @@ tvm::relay::Expr lowerFbgemmLinearInt8Acc32FP32(tvm::Array<tvm::relay::Expr> inp
   const tvm::relay::Expr& data_scale = tvm::relay::TupleGetItemNode::make(q_params, 1);
 
   // data, zero_point, scale
-  auto q_data = tvm::relay::CallNode::make(op_data_q, {inputs[0], data_zp, data_scale},
+  auto q_data = tvm::relay::CallNode::make(op_data_q, {reshaped_input, data_zp, data_scale},
                                                 tvm::Attrs(scheme_attrs), {});
   auto q_data_row_offset = tvm::relay::CallNode::make(op_data_row_offset,
       {q_data}, tvm::Attrs(), {});
 
-  tvm::relay::Expr packed_weight = insertInt8WeightTransform(inputs[1]);
   const auto weight_type = getExprType(inputs[1]);
   auto weight_shape = weight_type.shape;
   int N = (weight_shape[0].as<tvm::IntImm>())->value;
+  int K = (weight_shape[0].as<tvm::IntImm>())->value;
+  tvm::relay::Expr packed_weight = insertInt8WeightTransform(inputs[1]);
 
   tvm::Array<tvm::relay::Expr> deq_inputs = {q_data, packed_weight, inputs[3],
     q_data_row_offset, data_scale, data_zp};
@@ -142,9 +169,21 @@ tvm::relay::Expr lowerFbgemmLinearInt8Acc32FP32(tvm::Array<tvm::relay::Expr> inp
   params_attrs->N = N;
 
   auto mm = tvm::relay::CallNode::make(op_data_deq, deq_inputs, tvm::Attrs(params_attrs), {});
+
+  if (shape0.size() > 2) {
+    auto attrs = tvm::make_node<tvm::relay::ReshapeAttrs>();
+    for (int64_t i = 0;i < shape0.size() - 1; ++i) {
+      attrs->newshape.push_back((shape0[i].as<tvm::IntImm>())->value);
+    }
+    attrs->newshape.push_back((shape1[0].as<tvm::IntImm>())->value);
+    attrs->reverse = false;
+    auto op = tvm::relay::Op::Get("reshape");
+    mm = tvm::relay::CallNode::make(op, {mm}, tvm::Attrs(attrs), {});
+  }
+
   auto bias_add_op = tvm::relay::Op::Get("nn.bias_add");
   auto bias_add_attrs = tvm::make_node<tvm::relay::BiasAddAttrs>();
-  bias_add_attrs->axis = 1;
+  bias_add_attrs->axis = -1;
   return tvm::relay::CallNode::make(bias_add_op, {mm, inputs[6]}, tvm::Attrs(bias_add_attrs), {});
 }
 
@@ -586,7 +625,7 @@ RegisterTVMOperator reg({
        n->index = 0;
        return tvm::relay::TupleGetItem(n);
      }},
-    {Symbol::fromQualString("aten::fbgemm_linear_int8_weight_fp32_activation"),
+    {Symbol::fromQualString("aten::fbgemm_linear_int8_weight"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        return lowerFbgemmLinearInt8Acc32FP32(inputs);
      },
