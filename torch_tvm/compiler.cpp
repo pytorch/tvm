@@ -7,6 +7,7 @@
 #include <limits>
 #include <tvm/runtime/device_api.h>
 #include <tvm/node/container.h>
+#include <tvm/build_module.h>
 
 using namespace torch::jit;
 
@@ -411,6 +412,12 @@ void TVMCompiler::run(Stack& stack) {
     cache_[spec].populateParamTVMTensors(value_to_ivalue);
     auto params_constant_map = cache_[spec].generateParamConstantMap();
     set_params(params_constant_map);
+    auto build_config = tvm::BuildConfig::Current();
+    // This sets the loop partitioning such that, if loop is
+    // being partitioned in non-divisible factors it will partition
+    // it in divisible part and tail that is not divible.
+    // This help performance.
+    build_config->partition_const_loop = true;
     build_f(tvm_func, target_map, tvm::Target::Create(host_));
     std::string json = json_f();
     tvm::runtime::Module mod = mod_f();

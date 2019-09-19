@@ -8,8 +8,10 @@
 #include <torch/csrc/jit/operator_options.h>
 #include <torch/csrc/jit/passes/utils/subgraph_utils.h>
 
-#include "custom_tvm_ops/relay/custom_layer_norm_attrs.h"
-#include "custom_tvm_ops/relay/quantize_attrs.h"
+#include "custom_tvm_ops/cpp/relay/custom_layer_norm_attrs.h"
+#include "custom_tvm_ops/cpp/relay/quantize_attrs.h"
+#include "custom_tvm_ops/cpp/relay/weight_pack_attrs.h"
+#include "custom_tvm_ops/cpp/relay/utils.h"
 #include "compiler.h"
 #include "fusion_pass.h" // tvm_sym
 #include "operators.h"
@@ -30,6 +32,28 @@ const tvm::relay::TensorTypeNode getExprType(const tvm::relay::Expr& input) {
   auto checked_type = input_type->type_as<tvm::relay::TensorTypeNode>();
   TORCH_INTERNAL_ASSERT(checked_type);
   return *checked_type;
+}
+
+tvm::relay::Expr getCustomDense(tvm::relay::Expr data, tvm::relay::Expr weight) {
+  auto weight_pack_attrs = tvm::make_node<tvm::relay::WeightPackAttrs>();
+  const auto weight_type = getExprType(weight);
+  const auto weight_shape = weight_type.shape;
+  auto N = (weight_shape[0].as<tvm::IntImm>())->value;
+  weight_pack_attrs->pack_width = tvm::relay::helper::get_pack_width(N);
+  auto packed_weight = tvm::relay::CallNode::make(
+      tvm::relay::Op::Get("nn.dense_weight_pack"),
+      {weight},
+      tvm::Attrs(weight_pack_attrs),
+      {});
+
+  auto dense_attrs = tvm::make_node<tvm::relay::DenseAttrs>();
+  auto out = tvm::relay::CallNode::make(
+      tvm::relay::Op::Get("nn.custom_dense"),
+      {data, packed_weight},
+      tvm::Attrs(dense_attrs),
+      {});
+
+  return out;
 }
 
 tvm::relay::Expr lowerLinear(tvm::Array<tvm::relay::Expr> inputs) {
@@ -65,12 +89,11 @@ tvm::relay::Expr lowerLinear(tvm::Array<tvm::relay::Expr> inputs) {
   TORCH_CHECK((batch_dim0 == batch_dim1),
       "Input and weight must have same value in batch dim.");
 
-  auto dense_attrs = tvm::make_node<tvm::relay::DenseAttrs>();
-  auto out = tvm::relay::CallNode::make(
-      tvm::relay::Op::Get("nn.dense"),
-      {reshaped_input, inputs[1]},
-      tvm::Attrs(dense_attrs),
-      {});
+  //TODO: Right now custom dense is only supported for cpu target.
+  //Any other target will likely break, e.g. arm_cpu.
+  //Future fix.
+  tvm::relay::Expr out;
+  out = getCustomDense(reshaped_input, inputs[1]);
 
   if (shape0.size() > 2) {
     auto attrs = tvm::make_node<tvm::relay::ReshapeAttrs>();
