@@ -41,16 +41,21 @@ class CustomLayerNormUtils(object):
 
     @staticmethod
     def print_schedule(schedule, input_ph, output_ph):
-        print(tvm.lower(schedule, [input_ph, output_ph], simple_mode=True))
+        print(tvm.lower(schedule, [*input_ph, output_ph], simple_mode=True))
 
     @staticmethod
     def optimize_schedule(schedule, output_tensor):
-        mean_var_sum = output_tensor.op.input_tensors[0]
         divide_1 = output_tensor.op.input_tensors[1]
         divide_2 = output_tensor.op.input_tensors[2]
+        mean_var_sum = divide_1.op.input_tensors[0]
+        squared_data = mean_var_sum.op.input_tensors[1]
         schedule[divide_1].compute_inline()
         schedule[divide_2].compute_inline()
-        schedule[mean_var_sum].compute_at(s[normalized_output_ph], normalized_output_ph.op.axis[0])
+        ko, ki = schedule[mean_var_sum].split(mean_var_sum.op.reduce_axis[0], factor=8)
+        BF = schedule.rfactor(mean_var_sum, ki)
+        schedule[mean_var_sum].compute_at(schedule[output_tensor], output_tensor.op.axis[0])
+        schedule[BF[0]].compute_at(schedule[output_tensor], output_tensor.op.axis[0])
+        schedule[squared_data].compute_inline()
 
     @staticmethod
     def tvm_layer_norm_via_topi(a, a_out, shape, normalized_axis, \
@@ -70,6 +75,11 @@ class CustomLayerNormUtils(object):
         normalized_output_ph = layer_norm(input_ph, weights_ph, bias_ph, \
                 num_axis_to_normalize, affine, CustomLayerNormUtils.EPSILON_FLOAT)
         s = tvm.create_schedule([normalized_output_ph.op])
+        CustomLayerNormUtils.optimize_schedule(s, normalized_output_ph)
+        if not affine:
+            CustomLayerNormUtils.print_schedule(s, [input_ph], normalized_output_ph)
+        else:
+            CustomLayerNormUtils.print_schedule(s, [input_ph, weights_ph, bias_ph], normalized_output_ph)
         if affine:
             layer_norm_func = tvm.build(s, [input_ph, weights_ph, \
                     bias_ph, normalized_output_ph], target=target)
@@ -134,8 +144,7 @@ class CustomLayerNormUtils(object):
         pt_out = CustomLayerNormUtils.pt_layer_norm(a, shape, normalized_axis, weight, bias)
         tvm_out_via_topi = CustomLayerNormUtils.tvm_layer_norm_via_topi(a, \
                 a_out, shape, normalized_axis, build_config, weight, bias)
-        numpy.testing.assert_array_almost_equal(pt_out, \
-                tvm_out_via_topi, decimal=5)
+        torch.allclose(torch.from_numpy(pt_out), torch.from_numpy(tvm_out_via_topi))
         # Need to comment this out due to libarary loading issues because of
         # which registered functions are getting overwritten.
         #tvm_out_via_relay = CustomLayerNormUtils.tvm_layer_norm_via_relay(a, \
