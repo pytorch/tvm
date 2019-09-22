@@ -164,7 +164,6 @@ tvm::relay::Expr lowerFbgemmLinearInt8Acc32FP32(tvm::Array<tvm::relay::Expr> inp
   const auto weight_type = getExprType(inputs[1]);
   auto weight_shape = weight_type.shape;
   int N = (weight_shape[0].as<tvm::IntImm>())->value;
-  int K = (weight_shape[0].as<tvm::IntImm>())->value;
   tvm::relay::Expr packed_weight = insertInt8WeightTransform(inputs[1], N);
 
   tvm::Array<tvm::relay::Expr> deq_inputs = {q_data, packed_weight, inputs[3],

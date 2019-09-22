@@ -141,7 +141,7 @@ def _schedule_quantized_mm(cfg, s, QGEMM):
     y, x = s[QGEMM].op.axis
     k, = s[QGEMM].op.reduce_axis
     xo, xi = s[QGEMM].split(x, factor=16)
-    x_dim_size = get_const_int(QGEMM.shape[0])
+    x_dim_size = get_const_int(QGEMM.shape[1])
     if x_dim_size >= 16:
         ko, ki = s[QGEMM].split(k, factor=4)
         s[QGEMM].reorder(xo, ko, y, xi, ki)

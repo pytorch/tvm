@@ -26,12 +26,12 @@ Array<Tensor> data_int8_quantize(
   auto clamp_output = tvm::compute(
       data->shape,
       [&](Var i, Var j) {
-         return tvm::cast(target_type,
+         return tvm::cast(target_type, tvm::round(
             tvm::min(
                tvm::max(tvm::cast(Float(32), zero_point(0)) + data(i, j)*inverse_scale, q_min),
                q_max
             )
-         );
+         ));
       },
       "tensor",
       "int8_quantize_data"
@@ -79,13 +79,12 @@ Array<Tensor> data_int8_mm_dequantize(
         "tensor",
         "quantized_mm"
       );
-  auto zero_point_mul = weight_zero_point*data_zero_point(0)*(data->shape[1]);
 
   auto result = tvm::compute(
         {data->shape[0], Expr(N)},
         [&](Var i, Var j) {
           return scale_mul*(tvm::cast(Float(32), (quantized_mm(i, j)-data_acc(i)*weight_zero_point-
-                            weight_acc(j)*data_zero_point(0) + zero_point_mul)));
+                            weight_acc(j)*data_zero_point(0))));
         },
         "tensor",
         "mm_dequantize"
