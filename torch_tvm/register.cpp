@@ -34,7 +34,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
   options.setAliasAnalysis(AliasAnalysisKind::PURE_FUNCTION);
   RegisterOperators op({Operator(
       getTVMSymbol(),
-      [](const Node* node) {
+      [](const Node* node) -> Operation {
         auto cc = std::make_shared<TVMCompiler>(
             node, opt_level, strict, device_type, device, host);
         return [cc](Stack& stack) {

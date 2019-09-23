@@ -1,5 +1,5 @@
 import unittest
-from util import TVMTest
+from test.util import TVMTest
 from torch.testing import FileCheck
 
 import torch
