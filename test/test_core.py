@@ -2,6 +2,7 @@ import unittest
 from test.util import TVMTest
 import torch
 import torch_tvm
+import torch.nn.functional as F
 
 
 class TestCore(TVMTest):
@@ -134,6 +135,33 @@ class TestCore(TVMTest):
         assert "aten::dropout" not in \
                 str(tvm_graph_inference.graph_for(input_a, input_b, input_c)), \
                 "dropout must be removed during inference."
+
+    @TVMTest.given(
+        shape=TVMTest.rand_shape(rank=2, min_dim=4),
+        out_features=TVMTest.rand_int(3, 6),
+    )
+    def test_fuse_single_node(self, shape, out_features):
+        print("Running test for test_fuse_single_node")
+        input = torch.rand(shape)
+        weight = torch.rand(out_features, shape[1])
+        bias = torch.rand(out_features)
+
+        # check single node graph
+        def linear(a, b, c):
+            return F.linear(a, b, c)
+
+        ref_out, tvm_out = self.runBoth(linear, input, weight, bias)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
+
+         # check to verify fusion still works
+        def linearSum(a, b, c):
+            return F.linear(a, b, c) + 2.0
+
+        ref_out, tvm_out = self.runBoth(linearSum, input, weight, bias)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
+
+
+
 
 if __name__ == "__main__":
     unittest.main()
