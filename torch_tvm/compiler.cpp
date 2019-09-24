@@ -341,12 +341,14 @@ TVMCompiler::TVMCompiler(
     int opt_level,
     bool strict,
     bool debug,
+    bool debug_runtime,
     std::string device_type,
     std::string device,
     std::string host)
     : opt_level_(opt_level),
       strict_(strict),
       debug_(debug),
+      debug_runtime_(debug_runtime),
       device_type_(device_type),
       device_(device),
       host_(host) {
@@ -448,10 +450,19 @@ void TVMCompiler::run(Stack& stack) {
     }
     auto pfr = tvm::runtime::Registry::Get("tvm.graph_runtime.create");
     TORCH_INTERNAL_ASSERT(pfr);
+    if (debug_runtime_) {
+        pfr = tvm::runtime::Registry::Get("tvm.graph_runtime_debug.create");
+        TORCH_CHECK(pfr, "TVM must be compiled with debug runtime. "
+            "Use USE_GRAPH_RUNTIME_DEBUG in TVM CMake file.");
+    }
     tvm::runtime::Module run_mod =
         (*pfr)(json, mod, (int)ctx_.device_type, (int)ctx_.device_id);
     cache_[spec].set_input = run_mod.GetFunction("set_input_zero_copy", false);
-    cache_[spec].kernel = run_mod.GetFunction("run", false);
+    if (debug_runtime_) {
+        cache_[spec].kernel = run_mod.GetFunction("run_individual", false);
+    } else {
+        cache_[spec].kernel = run_mod.GetFunction("run", false);
+    }
     cache_[spec].get_output = run_mod.GetFunction("get_output", false);
     auto get_num_outputs = run_mod.GetFunction("get_num_outputs", false);
 
@@ -477,7 +488,11 @@ void TVMCompiler::run(Stack& stack) {
   std::vector<DLManagedTensorPtr> dl_tensor_list =
     set_input(value_to_ivalue, cache_[spec]);
 
-  cache_[spec].kernel();
+  if (debug_runtime_) {
+      cache_[spec].kernel(10, 10, 1);
+  } else {
+      cache_[spec].kernel();
+  }
 
   // clean the stack and add outputs to the stack
   drop(stack, num_inputs);

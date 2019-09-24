@@ -20,6 +20,7 @@ static bool fusion_enabled = false;
 // user with the relevant conversion errors, otherwise we bail out to JIT
 static bool strict = false;
 static bool debug = false;
+static bool debug_runtime = false;
 
 static int opt_level = 2;
 static std::string device_type = "cpu";
@@ -37,7 +38,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
       getTVMSymbol(),
       [](const Node* node) -> Operation {
         auto cc = std::make_shared<TVMCompiler>(
-            node, opt_level, strict, debug, device_type, device, host);
+            node, opt_level, strict, debug, debug_runtime, device_type, device, host);
         return [cc](Stack& stack) {
           RECORD_FUNCTION("TVM", std::vector<c10::IValue>());
           cc->run(stack);
@@ -68,6 +69,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
       [](int opt_level_,
          bool strict_,
          bool debug_,
+         bool debug_runtime_,
          std::string device_type_,
          std::string device_,
          std::string host_) {
@@ -75,6 +77,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
         debug = true;
         strict = strict_;
         debug = debug_;
+        debug_runtime = debug_runtime_;
         opt_level = opt_level_;
         device_type = device_type_;
         device = device_;
@@ -83,6 +86,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
       py::arg("opt_level") = 2,
       py::arg("strict") = false,
       py::arg("debug") = false,
+      py::arg("debug_runtime") = false,
       py::arg("device_type") = "cpu",
       py::arg("device") = "llvm -mcpu=core-avx2",
       py::arg("host") = "llvm -mcpu=core-avx2");
