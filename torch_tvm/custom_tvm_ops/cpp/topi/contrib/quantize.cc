@@ -3,6 +3,7 @@
 #include <tvm/runtime/util.h>
 #include <cmath>
 #include <iostream>
+#include <limits>
 
 namespace tvm {
 namespace contrib {
@@ -23,9 +24,9 @@ TVM_REGISTER_GLOBAL("tvm.contrib.find_minmax")
       int num_els = m * n;
       int num_iters = num_els / 16;
       int num_left_overs = num_els % 16;
-      float min_v[16] = {0.f};
-      float max_v[16] = {0.f};
-      for (int i = 0; i < m; i++) {
+      float min_v[16] = {std::numeric_limits<float>::max()};
+      float max_v[16] = {std::numeric_limits<float>::lowest()};
+      for (int i = 0; i < num_iters; i++) {
         for (int j = 0; j < 16; j++) {
             min_v[j] = std::min(data_ptr[i*16 + j], min_v[j]);
             max_v[j] = std::max(data_ptr[i*16 + j], max_v[j]);
