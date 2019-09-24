@@ -9,9 +9,13 @@
 #include <tvm/node/container.h>
 #include <tvm/build_module.h>
 
+#include <tvm/lowered_func.h>
+
 using namespace torch::jit;
 
 using torch_tvm::utils::DLManagedTensorPtr;
+
+bool debug = 0;
 
 namespace {
 std::vector<DLManagedTensorPtr> set_input(
@@ -368,6 +372,12 @@ void TVMCompiler::run(Stack& stack) {
     value_to_ivalue[value_input] = inputs[i];
   }
 
+  if (debug) {
+    std::cout <<"subgraph \n";
+    std::cout << *subgraph_ << std::endl;
+    std::cout <<"END OF Input subgraph\n";
+  }
+
   CompleteArgumentSpec spec{false, ArrayRef<IValue>(inputs)};
 
   if (cache_.find(spec) == cache_.end()) {
@@ -419,8 +429,22 @@ void TVMCompiler::run(Stack& stack) {
     // This help performance.
     build_config->partition_const_loop = true;
     build_f(tvm_func, target_map, tvm::Target::Create(host_));
-    std::string json = json_f();
     tvm::runtime::Module mod = mod_f();
+    std::string json = json_f();
+    if (debug) {
+      auto lowered_f = build_mod_.GetFunction("get_lowered_funcs", false);
+      tvm::Map<std::string, tvm::Array<tvm::LoweredFunc> > lowered_funcs = lowered_f();
+      for (auto funcs : lowered_funcs) {
+        for (auto f : funcs.second) {
+          std::cout << "===== lowered func=====\n";
+          std::cout << f->body << std::endl;
+          std::cout << "===== end of lowered func=====\n";
+        }
+      }
+      std::cout << "======= ASM ========\n";
+      std::cout << mod->GetSource("asm") << std::endl;
+      std::cout << "======= END OF ASM========\n";
+    }
     auto pfr = tvm::runtime::Registry::Get("tvm.graph_runtime.create");
     TORCH_INTERNAL_ASSERT(pfr);
     tvm::runtime::Module run_mod =
