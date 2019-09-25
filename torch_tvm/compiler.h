@@ -8,10 +8,10 @@
 #include <tvm/build_module.h>
 #include <tvm/operation.h>
 
-#include <fstream>
 #include <vector>
 
 #include "memory_utils.h"
+#include "debug_utils.h"
 
 struct TVMGraphInputInfo {
   TVMGraphInputInfo(bool is_param_, std::string tvm_var_name_) {
@@ -66,7 +66,7 @@ struct TVMCompiler {
   std::string device_;
   std::string host_;
   tvm::runtime::Module build_mod_;
-  std::ofstream debug_file_;
+  DebugLogger debug_logger_;
 
  public:
   static tvm::relay::Var convertToRelay(torch::jit::Value* val, TVMContext ctx);

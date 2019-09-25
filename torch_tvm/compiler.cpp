@@ -7,7 +7,6 @@
 #include <limits>
 #include <tvm/runtime/device_api.h>
 #include <tvm/node/container.h>
-#include <tvm/build_module.h>
 
 #include <tvm/lowered_func.h>
 
@@ -367,12 +366,7 @@ TVMCompiler::TVMCompiler(
     // Just using a static name for now.
     // Maybe we can get more sophisticated and add append timestamp
     // to file name, but for now this should serve the purpose.
-    debug_file_ = std::ofstream("/tmp/debug_output.txt");
-    if (!debug_file_.is_open()) {
-      LOG(WARNING)
-          << "Could not open file /tmp/debug_output.txt,"
-          << " will dump debug info to stdout\n";
-    }
+    debug_logger_ = DebugLogger("/tmp/debug_output.txt");
   }
 }
 
@@ -405,15 +399,7 @@ void TVMCompiler::run(Stack& stack) {
     }
 
     if (debug_) {
-      if (debug_file_.is_open()) {
-        debug_file_ <<"subgraph \n";
-        debug_file_ << *subgraph_ << std::endl;
-        debug_file_ <<"END OF Input subgraph\n";
-      } else {
-        std::cout <<"subgraph \n";
-        std::cout << *subgraph_ << std::endl;
-        std::cout <<"END OF Input subgraph\n";
-      }
+      debug_logger_.printGraph(subgraph_);
     }
 
     // bail out mechanism: try to convert to Relay, if it fails to convert the
@@ -453,30 +439,8 @@ void TVMCompiler::run(Stack& stack) {
     tvm::runtime::Module mod = mod_f();
     std::string json = json_f();
     if (debug_) {
-      auto lowered_f = build_mod_.GetFunction("get_lowered_funcs", false);
-      tvm::Map<std::string, tvm::Array<tvm::LoweredFunc> > lowered_funcs = lowered_f();
-      for (auto funcs : lowered_funcs) {
-        for (auto f : funcs.second) {
-          if (debug_file_.is_open()) {
-            debug_file_ << "===== lowered func=====\n";
-            debug_file_ << f->body << std::endl;
-            debug_file_ << "===== end of lowered func=====\n";
-          } else {
-            std::cout << "===== lowered func=====\n";
-            std::cout << f->body << std::endl;
-            std::cout << "===== end of lowered func=====\n";
-          }
-        }
-      }
-      if (debug_file_.is_open()) {
-        debug_file_ << "======= ASM ========\n";
-        debug_file_ << mod->GetSource("asm") << std::endl;
-        debug_file_ << "======= END OF ASM========\n";
-      } else {
-        std::cout << "======= ASM ========\n";
-        std::cout << mod->GetSource("asm") << std::endl;
-        std::cout << "======= END OF ASM========\n";
-      }
+      debug_logger_.printLoweredFuncs(build_mod_);
+      debug_logger_.printASM(mod);
     }
     auto pfr = tvm::runtime::Registry::Get("tvm.graph_runtime.create");
     TORCH_INTERNAL_ASSERT(pfr);
