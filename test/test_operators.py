@@ -328,23 +328,38 @@ class TestOperators(TVMTest):
         assert torch.allclose(ref_out_no_bias, tvm_out_no_bias, rtol=0.01, atol=0.01)
 
 
+    # Have to make min_dim large since we may compare non tensorized imlementation
+    # against fbgemm and that requires K dim to be large enough.
     @TVMTest.given(
-        shape=TVMTest.rand_shape(rank=2, min_dim=10),
-        out_features=TVMTest.rand_int(15, 30),
+        shape=TVMTest.rand_shape(rank=2, min_dim=32, max_dim=64),
+        out_features=TVMTest.rand_int(15, 64),
     )
     def test_quantized_linear(self, shape, out_features):
-        input = torch.rand(shape)
-        weight = torch.rand(out_features, shape[1])
-        bias = torch.rand(out_features)
+        # This is necessary since for N of size > 16 we enforce it to be
+        # multiple of 16. Right this defines packing of weights and that
+        # specifically makes this requirement necessary.
+        # On the other hand loosing this requirement needs changes that require
+        # some changes on relay side which otherwise complains during shape
+        # propagation in shape inference.
+        # Same holds for k.
+        shape[1] = shape[1] * 4
+        if out_features > 16:
+            out_features = out_features * 16
+        input = torch.normal(torch.rand(shape))
+        weight = torch.normal(torch.rand(out_features, shape[1]))
+        bias = torch.normal(torch.rand(out_features))
         q_weight, col_offsets, scale, zero_point = \
             torch.fbgemm_linear_quantize_weight(weight.clone().float())
         packed_weight = torch.fbgemm_pack_quantized_matrix(q_weight.clone())
 
-        def fbgemm_quantized_linear(input, weight, bias):
-            return torch.fbgemm_linear_int8_weight_fp32_activation(
-                input.float(), q_weight, packed_weight, col_offsets, scale, zero_point, bias.float())
-        ref_out, tvm_out = self.runBoth(fbgemm_quantized_linear, input, weight, bias)
-        # relax the constraint to avoid flaky test
+        def fbgemm_quantized_linear(input, weight, bias, col_offsets):
+            return torch.fbgemm_linear_int8_weight(
+                input.float(), weight, packed_weight, col_offsets, scale, zero_point, bias.float())
+        ref_out, tvm_out = self.runBoth(fbgemm_quantized_linear, input, q_weight, bias, col_offsets)
+        # Too loose a bound. We can make this 0.05
+        # however this works only when we can tensorize, i.e. use AVX instructions.
+        # Since without that we cast int8 to int32 before mul we always get more precision
+        # which can result in mismatch. Fix this test once we have AVX2 impl as well.
         assert torch.allclose(ref_out, tvm_out, rtol=0.5, atol=0.5)
 
 

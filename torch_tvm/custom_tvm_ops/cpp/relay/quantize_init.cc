@@ -21,6 +21,9 @@ TVM_REGISTER_NODE_TYPE(QuantizeSchemeAttrs);
 TVM_REGISTER_API("relay.op.nn._make.quantize_data_int8_quantize")
   .set_body_typed(MakeDataInt8Quantization);
 
+TVM_REGISTER_API("relay.op.nn._make.quantize_data_int8_row_offset")
+  .set_body_typed(MakeDataInt8RowOffset);
+
 
 RELAY_REGISTER_OP("nn.quantize_data_int8_quantize")
 .describe(R"code(dynamic quantization of activation.
@@ -33,6 +36,16 @@ RELAY_REGISTER_OP("nn.quantize_data_int8_quantize")
   .set_attrs_type_key("relay.attrs.QuantizeSchemeAttrs")
   .set_support_level(10)
   .add_type_rel("DataInt8Quantization", DataInt8QuantizationRel);
+
+
+RELAY_REGISTER_OP("nn.quantize_data_int8_row_offset")
+.describe(R"code(dynamic row offset calculation of quantized data.
+- **data**: (M, N)
+)code" TVM_ADD_FILELINE)
+  .set_num_inputs(1)
+  .add_argument("data", "Tensor", "Quantized input tensor.")
+  .set_support_level(10)
+  .add_type_rel("DataInt8RowOffset", DataInt8RowOffsetRel);
 
 
 TVM_REGISTER_API("relay.op.nn._make.quantize_findminmax")
