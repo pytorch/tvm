@@ -26,7 +26,7 @@ Array<Tensor> data_int8_quantize(
   auto clamp_output = tvm::compute(
       data->shape,
       [&](Var i, Var j) {
-         return tvm::cast(target_type, tvm::round(
+         return tvm::cast(target_type, tvm::nearbyint(
             tvm::min(
                tvm::max(tvm::cast(Float(32), zero_point(0)) + data(i, j)*inverse_scale, q_min),
                q_max
