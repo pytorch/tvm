@@ -1,10 +1,7 @@
 import tvm
 from tvm import autotvm
-from tvm.autotvm.task.space import SplitEntity
 
-from topi.nn.util import get_pad_tuple
-from topi.nn.pad import pad
-from topi.util import simplify, get_const_tuple, get_const_int
+from topi.util import get_const_int
 from topi.generic import nn
 from topi import tag
 from topi.x86.tensor_intrin import dot_16x1x16_int8_int8_int32

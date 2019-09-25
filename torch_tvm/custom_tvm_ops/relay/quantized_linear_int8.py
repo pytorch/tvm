@@ -2,8 +2,6 @@ from __future__ import absolute_import
 
 import topi
 from tvm.relay.op import op as reg
-from tvm.relay.op.op import OpPattern, schedule_injective
-from topi.util import get_const_int
 from tvm import autotvm
 import tvm
 
@@ -45,7 +43,7 @@ def compute_data_int8_quantize(attrs, inputs, out_type, target):
 
 
 @reg.register_schedule("nn.quantize_data_int8_quantize")
-def schedule_quantized_mm_dequantize(attrs, outs, target):
+def schedule_data_int8_quantize(attrs, outs, target):
     with target:
         return quantized_linear_int8.schedule_data_int8_quantize(outs)
 
@@ -58,6 +56,6 @@ def compute_data_int8_row_offset(attrs, inputs, out_type, target):
 
 
 @reg.register_schedule("nn.quantize_data_int8_row_offset")
-def schedule_quantized_mm_dequantize(attrs, outs, target):
+def schedule_data_int8_row_offset(attrs, outs, target):
     with target:
         return quantized_linear_int8.schedule_data_int8_row_offset(outs)
