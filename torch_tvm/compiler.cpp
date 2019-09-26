@@ -7,7 +7,8 @@
 #include <limits>
 #include <tvm/runtime/device_api.h>
 #include <tvm/node/container.h>
-#include <tvm/build_module.h>
+
+#include <tvm/lowered_func.h>
 
 using namespace torch::jit;
 
@@ -338,11 +339,15 @@ TVMCompiler::TVMCompiler(
     const Node* node,
     int opt_level,
     bool strict,
+    bool debug,
+    bool debug_runtime,
     std::string device_type,
     std::string device,
     std::string host)
     : opt_level_(opt_level),
       strict_(strict),
+      debug_(debug),
+      debug_runtime_(debug_runtime),
       device_type_(device_type),
       device_(device),
       host_(host) {
@@ -356,6 +361,7 @@ TVMCompiler::TVMCompiler(
   auto pfb = tvm::runtime::Registry::Get("relay.build_module._BuildModule");
   TORCH_INTERNAL_ASSERT(pfb);
   build_mod_ = (*pfb)();
+
 }
 
 void TVMCompiler::run(Stack& stack) {
@@ -385,6 +391,11 @@ void TVMCompiler::run(Stack& stack) {
             *subgraph_);
       }
     }
+
+    if (debug_) {
+      getDebugLogger().printGraph(subgraph_);
+    }
+
     // bail out mechanism: try to convert to Relay, if it fails to convert the
     // graph by any reason(i.e. op difference), depend on the user preference,
     // either throw or fall back to the JIT interpreter for execution
@@ -419,14 +430,27 @@ void TVMCompiler::run(Stack& stack) {
     // This help performance.
     build_config->partition_const_loop = true;
     build_f(tvm_func, target_map, tvm::Target::Create(host_));
-    std::string json = json_f();
     tvm::runtime::Module mod = mod_f();
+    std::string json = json_f();
+    if (debug_) {
+      getDebugLogger().printLoweredFuncs(build_mod_);
+      getDebugLogger().printASM(mod);
+    }
     auto pfr = tvm::runtime::Registry::Get("tvm.graph_runtime.create");
     TORCH_INTERNAL_ASSERT(pfr);
+    if (debug_runtime_) {
+        pfr = tvm::runtime::Registry::Get("tvm.graph_runtime_debug.create");
+        TORCH_CHECK(pfr, "TVM must be compiled with debug runtime. "
+            "Use USE_GRAPH_RUNTIME_DEBUG in TVM CMake file.");
+    }
     tvm::runtime::Module run_mod =
         (*pfr)(json, mod, (int)ctx_.device_type, (int)ctx_.device_id);
     cache_[spec].set_input = run_mod.GetFunction("set_input_zero_copy", false);
-    cache_[spec].kernel = run_mod.GetFunction("run", false);
+    if (debug_runtime_) {
+        cache_[spec].kernel = run_mod.GetFunction("run_individual", false);
+    } else {
+        cache_[spec].kernel = run_mod.GetFunction("run", false);
+    }
     cache_[spec].get_output = run_mod.GetFunction("get_output", false);
     auto get_num_outputs = run_mod.GetFunction("get_num_outputs", false);
 
@@ -452,7 +476,11 @@ void TVMCompiler::run(Stack& stack) {
   std::vector<DLManagedTensorPtr> dl_tensor_list =
     set_input(value_to_ivalue, cache_[spec]);
 
-  cache_[spec].kernel();
+  if (debug_runtime_) {
+      cache_[spec].kernel(10, 10, 1);
+  } else {
+      cache_[spec].kernel();
+  }
 
   // clean the stack and add outputs to the stack
   drop(stack, num_inputs);

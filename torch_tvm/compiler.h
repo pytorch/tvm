@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "memory_utils.h"
+#include "debug_utils.h"
 
 struct TVMGraphInputInfo {
   TVMGraphInputInfo(bool is_param_, std::string tvm_var_name_) {
@@ -46,6 +47,8 @@ struct TVMCompiler {
       const torch::jit::Node* node,
       int opt_level = 2,
       bool strict = false,
+      bool debug = false,
+      bool debug_runtime = false,
       std::string device_type = "cpu",
       std::string device = "llvm",
       std::string host = "llvm");
@@ -57,10 +60,13 @@ struct TVMCompiler {
   TVMContext ctx_;
   int opt_level_;
   bool strict_;
+  bool debug_;
+  bool debug_runtime_;
   std::string device_type_;
   std::string device_;
   std::string host_;
   tvm::runtime::Module build_mod_;
+  DebugLogger debug_logger_;
 
  public:
   static tvm::relay::Var convertToRelay(torch::jit::Value* val, TVMContext ctx);
