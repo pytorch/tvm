@@ -362,12 +362,6 @@ TVMCompiler::TVMCompiler(
   TORCH_INTERNAL_ASSERT(pfb);
   build_mod_ = (*pfb)();
 
-  if (debug_) {
-    // Just using a static name for now.
-    // Maybe we can get more sophisticated and add append timestamp
-    // to file name, but for now this should serve the purpose.
-    debug_logger_ = DebugLogger("/tmp/debug_output.txt");
-  }
 }
 
 void TVMCompiler::run(Stack& stack) {
@@ -399,7 +393,7 @@ void TVMCompiler::run(Stack& stack) {
     }
 
     if (debug_) {
-      debug_logger_.printGraph(subgraph_);
+      getDebugLogger().printGraph(subgraph_);
     }
 
     // bail out mechanism: try to convert to Relay, if it fails to convert the
@@ -439,8 +433,8 @@ void TVMCompiler::run(Stack& stack) {
     tvm::runtime::Module mod = mod_f();
     std::string json = json_f();
     if (debug_) {
-      debug_logger_.printLoweredFuncs(build_mod_);
-      debug_logger_.printASM(mod);
+      getDebugLogger().printLoweredFuncs(build_mod_);
+      getDebugLogger().printASM(mod);
     }
     auto pfr = tvm::runtime::Registry::Get("tvm.graph_runtime.create");
     TORCH_INTERNAL_ASSERT(pfr);

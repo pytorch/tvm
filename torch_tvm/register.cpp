@@ -6,6 +6,7 @@
 #include <torch/csrc/jit/pybind_utils.h>
 
 #include "compiler.h"
+#include "debug_utils.h"
 #include "fuse_linear.h"
 #include "fuse_concat.h"
 #include "fusion_pass.h"
@@ -56,9 +57,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
       RemoveDropout(g);
       FuseSupportedOps(g);
       if (debug) {
-        std::cout << "---------- Fused Graph--------\n";
-        std::cout << *g << std::endl;
-        std::cout << "---------- End of Fused Graph--------\n";
+        getDebugLogger().printGraph(g);
       }
     }
   });
