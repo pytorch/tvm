@@ -5,6 +5,8 @@
 #include <tvm/relay/expr.h>
 #include <tvm/relay/op_attr_types.h>
 #include <tvm/runtime/packed_func.h>
+#include <tvm/packed_func_ext.h>
+#include <tvm/runtime/registry.h>
 
 #include <custom_tvm_ops/cpp/relay/custom_layer_norm_attrs.h>
 #include <custom_tvm_ops/cpp/relay/quantize_attrs.h>
@@ -14,7 +16,7 @@
 #include "quantize.h"
 #include "contrib/quantize.h"
 #include "generic/quantize_generic_sched.h"
-
+#include "x86/quantize_data_mm_dequantize.h"
 
 namespace tvm {
 
@@ -119,6 +121,19 @@ class CustomTOPIOpRegisterer {
             }),
         10);
     (*reg_ptr)(
+        "nn.quantize_data_mm_dequantize",
+        "FTVMSchedule",
+        tvm::relay::FTVMSchedule(
+            [](const tvm::Attrs& attrs,
+               const tvm::Array<tvm::Tensor>& outs,
+               const tvm::Target& target) -> tvm::Schedule {
+              auto schedule_quantized_mm_dequantize =
+                  ::tvm::GenericFunc::Get("schedule_quantized_mm_dequantize");
+              // return topi::generic::schedule_quantized_mm_dequantize(outs);
+              return schedule_quantized_mm_dequantize(outs);
+            }),
+        10);
+    (*reg_ptr)(
         "nn.quantize_data_int8_quantize",
         "TOpPattern",
         static_cast<int>(OpPatternKind::kOutEWiseFusable),
@@ -144,6 +159,36 @@ namespace topi {
 
 using namespace tvm;
 using namespace tvm::runtime;
+
+/*! \brief Builder function for instantiating schedules. */
+using FTVMScheduleBuilder = std::function<tvm::Schedule(
+    const tvm::Target& target,
+    const tvm::Array<tvm::Tensor>& outs)>;
+
+/*!
+ * \brief Helper function for registering generic functions matching the
+ * FTVMScheduleBuilder signature. The schedule builder function is wrapped
+ * with a PackedFunc suitable for passing to a tvm::GenericFunc.
+ *
+ * \param builder The schedule builder to wrap.
+ *
+ * \return The wrapped schedule builder
+ */
+inline PackedFunc WrapSchedule(FTVMScheduleBuilder builder) {
+  return PackedFunc([builder](TVMArgs args, TVMRetValue* ret) {
+    auto target = Target::Current(false);
+    Array<Tensor> outs;
+    NodeRef argNodeRef = args[0];
+    if (argNodeRef->type_index() == outs->type_index()) {
+      outs = args[0];
+    } else {
+      outs = Array<Tensor>{args[0]};
+    }
+
+    *ret = builder(target, outs);
+  });
+}
+
 // For python API
 TVM_REGISTER_GLOBAL("nn.custom_layer_norm")
     .set_body([](TVMArgs args, TVMRetValue* rv) {
@@ -177,5 +222,21 @@ TVM_REGISTER_GLOBAL("nn.compute_data_int8_row_offset")
       CHECK(args.size() == 1);
       *rv = data_int8_row_offset(args[0]);
     });
+
+TVM_REGISTER_GLOBAL("topi.generic.schedule_quantized_mm_dequantize")
+    .set_body([](TVMArgs args, TVMRetValue* rv) {
+      *rv = topi::generic::schedule_quantized_mm_dequantize(args[0], args[1]);
+    });
+
+TVM_REGISTER_GLOBAL("topi.x86.schedule_quantized_mm_dequantize")
+    .set_body([](TVMArgs args, TVMRetValue* rv) {
+      *rv = topi::x86::schedule_quantized_mm_dequantize(args[0], args[1]);
+    });
+
+TVM_REGISTER_GENERIC_FUNC(schedule_quantized_mm_dequantize)
+    .set_default(WrapSchedule(topi::generic::schedule_quantized_mm_dequantize))
+    .register_func(
+        {"cpu"},
+        WrapSchedule(topi::x86::schedule_quantized_mm_dequantize));
 
 } // namespace topi

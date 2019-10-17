@@ -22,6 +22,9 @@ IF(DEFINED ENV{TVM_DIR})
 ENDIF()
 message("Using tvm dir ${TVM_DIR}")
 
+include(${TVM_DIR}/cmake/util/FindLLVM.cmake)
+find_llvm(${USE_LLVM})
+
 link_directories(${PYTORCH_DIR}/lib)
 
 add_subdirectory(pybind11)
@@ -41,4 +44,5 @@ target_include_directories(_torch_tvm PUBLIC
     ${TVM_DIR}/3rdparty/dlpack/include/
     ${PYTORCH_DIR}/include
     ${PYBIND11_INCLUDE_DIR}
+    ${LLVM_INCLUDE_DIRS}
 )
