@@ -129,7 +129,6 @@ class CustomTOPIOpRegisterer {
                const tvm::Target& target) -> tvm::Schedule {
               auto schedule_quantized_mm_dequantize =
                   ::tvm::GenericFunc::Get("schedule_quantized_mm_dequantize");
-              // return topi::generic::schedule_quantized_mm_dequantize(outs);
               return schedule_quantized_mm_dequantize(outs);
             }),
         10);
