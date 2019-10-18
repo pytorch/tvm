@@ -361,7 +361,7 @@ TVMCompiler::TVMCompiler(
   auto pfb = tvm::runtime::Registry::Get("relay.build_module._BuildModule");
   TORCH_INTERNAL_ASSERT(pfb);
   build_mod_ = (*pfb)();
-
+  activation_buffer_ = at::zeros({0}, at::kCPU);
 }
 
 void TVMCompiler::run(Stack& stack) {
@@ -436,7 +436,12 @@ void TVMCompiler::run(Stack& stack) {
       getDebugLogger().printLoweredFuncs(build_mod_);
       getDebugLogger().printASM(mod);
     }
+#ifdef TVM_USE_FB_GRAPH_RUNTIME
+    auto pfr = tvm::runtime::Registry::Get("tvm.fb_graph_runtime.create");
+#else
     auto pfr = tvm::runtime::Registry::Get("tvm.graph_runtime.create");
+#endif
+
     TORCH_INTERNAL_ASSERT(pfr);
     if (debug_runtime_) {
         pfr = tvm::runtime::Registry::Get("tvm.graph_runtime_debug.create");
@@ -453,14 +458,19 @@ void TVMCompiler::run(Stack& stack) {
     }
     cache_[spec].get_output = run_mod.GetFunction("get_output", false);
     auto get_num_outputs = run_mod.GetFunction("get_num_outputs", false);
+    cache_[spec].setup_external_storage = run_mod.GetFunction("setup_external_storage",false);
 
-    // Set parameter inputs.
-    tvm::Map<std::string, tvm::relay::Constant> params = get_params();
-    for (const auto& param : params) {
+    tvm::Map<std::string, tvm::relay::Constant> local_params = get_params();
+
+#ifdef TVM_USE_FB_GRAPH_RUNTIME
+    allocateMemoryAndSetParams(run_mod, cache_[spec], local_params, json);
+#else
+    for (const auto& param : local_params) {
         const auto& param_name = param.first;
         const auto& param_ndarray_val = param.second->data;
         cache_[spec].set_input(param_name, param_ndarray_val);
     }
+#endif
 
     int n = get_num_outputs();
     TORCH_CHECK(
