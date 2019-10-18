@@ -86,7 +86,6 @@ struct TVMCompiler {
       input_values = nullptr);
 #ifdef TVM_USE_FB_GRAPH_RUNTIME
   void allocateMemoryAndSetParams(
-      const tvm::runtime::Module& run_mod,
       TVMObject& obj,
       const tvm::Map<std::string, tvm::relay::Constant>& params,
       const std::string& json_str);
