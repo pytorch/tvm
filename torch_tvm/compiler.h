@@ -7,6 +7,7 @@
 #include <tvm/relay/analysis.h>
 #include <tvm/build_module.h>
 #include <tvm/operation.h>
+#include <ATen/Tensor.h>
 
 #include <vector>
 
@@ -32,6 +33,7 @@ struct TVMObject {
   tvm::PackedFunc kernel;
   tvm::PackedFunc set_input;
   tvm::PackedFunc get_output;
+  tvm::PackedFunc setup_external_storage;
   // Map input indices to values in the subgraph
   // Plus indicates if the corresponding value is immutable,
   // e.g., a parameter such as weight.
@@ -67,6 +69,10 @@ struct TVMCompiler {
   std::string host_;
   tvm::runtime::Module build_mod_;
   DebugLogger debug_logger_;
+  // Not used in OSS
+  at::Tensor activation_buffer_;
+  std::vector<int64_t> activation_buffer_shape_;
+  int64_t max_activation_buffer_size_{0};
 
  public:
   static tvm::relay::Var convertToRelay(torch::jit::Value* val, TVMContext ctx);
@@ -78,4 +84,10 @@ struct TVMCompiler {
       TVMContext ctx,
       std::unordered_map<torch::jit::Value*, TVMGraphInputInfo>*
       input_values = nullptr);
+#ifdef TVM_USE_FB_GRAPH_RUNTIME
+  void allocateMemoryAndSetParams(
+      TVMObject& obj,
+      const tvm::Map<std::string, tvm::relay::Constant>& params,
+      const std::string& json_str);
+#endif
 };
