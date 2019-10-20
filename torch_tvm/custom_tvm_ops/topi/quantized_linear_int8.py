@@ -4,7 +4,8 @@ from tvm import autotvm
 from topi.util import get_const_int
 from topi.generic import nn
 from topi import tag
-from topi.x86.tensor_intrin import dot_16x1x16_int8_int8_int32
+from topi.x86.tensor_intrin import dot_16x1x16_int8_int8_int32, \
+                                   dot_1x4x16_int8_int8_int32_avx2
 
 from enum import Enum
 AVXType = Enum('AVXType', 'AVX2 AVX512 None')
@@ -145,6 +146,9 @@ def _schedule_quantized_mm(cfg, s, QGEMM):
         s[QGEMM].unroll(y)
         if avx_type == AVXType.AVX512:
             pc = dot_16x1x16_int8_int8_int32()
+            s[QGEMM].tensorize(xi, pc)
+        if avx_type == AVXType.AVX2:
+            pc = dot_1x4x16_int8_int8_int32_avx2()
             s[QGEMM].tensorize(xi, pc)
     else:
         s[QGEMM].reorder(xo, y, xi)
