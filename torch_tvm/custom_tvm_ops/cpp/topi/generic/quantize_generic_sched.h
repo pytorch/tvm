@@ -54,7 +54,8 @@ inline Schedule schedule_quantize_data_int8_row_offset(
   return s;
 }
 
-inline Schedule schedule_quantize_data_mm_dequantize(
+inline Schedule schedule_quantized_mm_dequantize(
+    const Target& target,
     const Array<Tensor>& outs) {
   Array<Operation> out_ops;
   for (auto out : outs) {

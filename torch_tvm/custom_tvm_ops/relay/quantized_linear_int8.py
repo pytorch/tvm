@@ -24,7 +24,8 @@ def compute_quantized_mm_dequantize(attrs, inputs, out_type, target):
     return [out]
 
 
-@reg.register_schedule("nn.quantize_data_mm_dequantize")
+# switch to use C++ version schedule
+# @reg.register_schedule("nn.quantize_data_mm_dequantize")
 def schedule_quantized_mm_dequantize(attrs, outs, target):
     with target:
         return quantized_linear_int8.schedule_quantized_mm_dequantize(outs)
