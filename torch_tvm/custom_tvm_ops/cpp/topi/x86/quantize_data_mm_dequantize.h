@@ -122,7 +122,7 @@ TensorIntrin dot_1x4x16_int8_int8_int32_avx2() {
       /*Stmt body*/ reduce_update);
 }
 
-// dot_16x1x16_int8_int8_int32
+// for avx512
 TensorIntrin dot_16x1x16_int8_int8_int32_avx512() {
   tvm::Tensor data = tvm::placeholder({4}, UInt(8), "data");
   tvm::Tensor kernel = tvm::placeholder({16, 4}, Int(8), "kernel");
