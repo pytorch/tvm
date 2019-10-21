@@ -5,63 +5,19 @@
 #include <torch/csrc/jit/pass_manager.h>
 #include <torch/csrc/jit/pybind_utils.h>
 
-#include "compiler.h"
-#include "debug_utils.h"
-#include "fuse_linear.h"
-#include "fuse_concat.h"
-#include "fusion_pass.h"
-#include "remove_dropout.h"
+#include "register.h"
 
 namespace py = pybind11;
-using namespace torch::jit;
 
 // control if we enable tvm fusion or not
 static bool fusion_enabled = false;
-// control if the run mode is strict or not, if it's strict, we throw to
-// user with the relevant conversion errors, otherwise we bail out to JIT
-static bool strict = false;
-static bool debug = false;
-static bool debug_runtime = false;
-
-static int opt_level = 2;
-static std::string device_type = "cpu";
-static std::string device = "llvm -mcpu=core-avx2";
-static std::string host = "llvm -mcpu=core-avx2";
 
 static std::unordered_map<size_t, tvm::relay::Expr> relay_exprs;
 static size_t relay_exprs_uuid = 0;
 
 PYBIND11_MODULE(_torch_tvm, m) {
-  // Register the tvm::CompilationGroup operator
-  auto options = c10::OperatorOptions();
-  options.setAliasAnalysis(AliasAnalysisKind::PURE_FUNCTION);
-  RegisterOperators op({Operator(
-      getTVMSymbol(),
-      [](const Node* node) -> Operation {
-        auto cc = std::make_shared<TVMCompiler>(
-            node, opt_level, strict, debug, debug_runtime, device_type, device, host);
-        return [cc](Stack& stack) {
-          RECORD_FUNCTION("TVM", std::vector<c10::IValue>());
-          cc->run(stack);
-          return 0;
-        };
-      },
-      options)});
-
-  // Register the pass that fuses parts of the graph into
-  // a tvm::CompilationGroup
-  RegisterPass pass([](std::shared_ptr<Graph>& g) {
-    if (fusion_enabled) {
-      FuseLinear(g);
-      FuseConcat(g);
-      RemoveDropout(g);
-      FuseSupportedOps(g);
-      if (debug) {
-        getDebugLogger().printGraph(g);
-      }
-    }
-  });
-
+  std::function<bool()> is_enabled = []() { return fusion_enabled; };
+  tvm::torch_tvm_enable(is_enabled);
   // python API to enable and disable tvm fusion
   m.def(
       "enable",
@@ -73,14 +29,7 @@ PYBIND11_MODULE(_torch_tvm, m) {
          std::string device_,
          std::string host_) {
         fusion_enabled = true;
-        debug = true;
-        strict = strict_;
-        debug = debug_;
-        debug_runtime = debug_runtime_;
-        opt_level = opt_level_;
-        device_type = device_type_;
-        device = device_;
-        host = host_;
+        tvm::set_build_config(opt_level_, strict_, debug_, debug_runtime_, device_type_, device_, host_);
       },
       py::arg("opt_level") = 2,
       py::arg("strict") = false,
