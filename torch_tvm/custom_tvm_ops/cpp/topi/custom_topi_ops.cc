@@ -121,21 +121,33 @@ class CustomTOPIOpRegisterer {
             }),
         10);
     (*reg_ptr)(
-        "nn.quantize_data_mm_dequantize",
+        "nn.quantize_data_int8_quantize",
+        "TOpPattern",
+        static_cast<int>(OpPatternKind::kOutEWiseFusable),
+        10);
+    (*reg_ptr)(
+        "nn.quantize_data_int8_quantize",
+        "FTVMCompute",
+        tvm::relay::FTVMCompute(
+            [](const tvm::Attrs& attrs,
+               const tvm::Array<tvm::Tensor>& inputs,
+               const tvm::relay::Type& out_type,
+               const tvm::Target& target) -> tvm::Array<tvm::Tensor> {
+              const auto* param = attrs.as<relay::QuantizeSchemeAttrs>();
+              auto precision = param->precision;
+              auto is_signed = param->is_signed;
+              return topi::data_int8_quantize(inputs[0], inputs[1], inputs[2], is_signed, precision);
+            }),
+        10);
+    (*reg_ptr)(
+        "nn.quantize_data_int8_quantize",
         "FTVMSchedule",
         tvm::relay::FTVMSchedule(
             [](const tvm::Attrs& attrs,
                const tvm::Array<tvm::Tensor>& outs,
                const tvm::Target& target) -> tvm::Schedule {
-              auto schedule_quantized_mm_dequantize =
-                  ::tvm::GenericFunc::Get("schedule_quantized_mm_dequantize");
-              return schedule_quantized_mm_dequantize(outs);
+              return topi::generic::schedule_quantize_data_int8_quantize(outs);
             }),
-        10);
-    (*reg_ptr)(
-        "nn.quantize_data_int8_quantize",
-        "TOpPattern",
-        static_cast<int>(OpPatternKind::kOutEWiseFusable),
         10);
     (*reg_ptr)(
         "nn.quantize_data_int8_row_offset",
@@ -143,9 +155,58 @@ class CustomTOPIOpRegisterer {
         static_cast<int>(OpPatternKind::kOutEWiseFusable),
         10);
     (*reg_ptr)(
+        "nn.quantize_data_int8_row_offset",
+        "FTVMCompute",
+        tvm::relay::FTVMCompute(
+            [](const tvm::Attrs& attrs,
+               const tvm::Array<tvm::Tensor>& inputs,
+               const tvm::relay::Type& out_type,
+               const tvm::Target& target) -> tvm::Array<tvm::Tensor> {
+              return topi::data_int8_row_offset(inputs[0]);
+            }),
+        10);
+    (*reg_ptr)(
+        "nn.quantize_data_int8_row_offset",
+        "FTVMSchedule",
+        tvm::relay::FTVMSchedule(
+            [](const tvm::Attrs& attrs,
+               const tvm::Array<tvm::Tensor>& outs,
+               const tvm::Target& target) -> tvm::Schedule {
+              return topi::generic::schedule_quantize_data_int8_row_offset(outs);
+            }),
+        10);
+    (*reg_ptr)(
         "nn.quantize_data_mm_dequantize",
         "TOpPattern",
         static_cast<int>(OpPatternKind::kOutEWiseFusable),
+        10);
+    (*reg_ptr)(
+        "nn.quantize_data_mm_dequantize",
+        "FTVMCompute",
+        tvm::relay::FTVMCompute(
+            [](const tvm::Attrs& attrs,
+               const tvm::Array<tvm::Tensor>& inputs,
+               const tvm::relay::Type& out_type,
+               const tvm::Target& target) -> tvm::Array<tvm::Tensor> {
+              const auto* param = attrs.as<relay::QuantizedParamsAttrs>();
+              auto w_scale = param->w_scale;
+              auto w_zp = param->w_zp;
+              auto N = param->N;
+
+              return topi::data_int8_mm_dequantize(
+                  inputs[0], inputs[1], inputs[2], inputs[3],
+                  inputs[4], inputs[5], w_scale, w_zp, N);
+            }),
+        10);
+    (*reg_ptr)(
+        "nn.quantize_data_mm_dequantize",
+        "FTVMSchedule",
+        tvm::relay::FTVMSchedule(
+            [](const tvm::Attrs& attrs,
+               const tvm::Array<tvm::Tensor>& outs,
+               const tvm::Target& target) -> tvm::Schedule {
+              return  topi::generic::schedule_quantized_mm_dequantize(target, outs);
+            }),
         10);
   }
 };
