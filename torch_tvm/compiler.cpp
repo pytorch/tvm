@@ -463,7 +463,7 @@ void TVMCompiler::run(Stack& stack) {
     tvm::Map<std::string, tvm::relay::Constant> local_params = get_params();
 
 #ifdef TVM_USE_FB_GRAPH_RUNTIME
-    allocateMemoryAndSetParams(run_mod, cache_[spec], local_params, json);
+    allocateMemoryAndSetParams(cache_[spec], local_params, json);
 #else
     for (const auto& param : local_params) {
         const auto& param_name = param.first;
