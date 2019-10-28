@@ -33,7 +33,7 @@ jobs:
             source env/bin/activate
             cd ../pytorch
             pip install -r requirements.txt
-            python setup.py install
+            BUILD_BINARY=OFF BUILD_TEST=0 BUILD_CAFFE2_OPS=0 python setup.py install
       - run:
           name: Build and test pytorch/tvm
           command: |
