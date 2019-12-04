@@ -27,9 +27,13 @@ PYBIND11_MODULE(_torch_tvm, m) {
          bool debug_runtime_,
          std::string device_type_,
          std::string device_,
-         std::string host_) {
+         std::string host_,
+         int device_id_,
+         bool is_training_) {
         fusion_enabled = true;
-        tvm::set_build_config(opt_level_, strict_, debug_, debug_runtime_, device_type_, device_, host_);
+        tvm::set_build_config(
+            opt_level_, strict_, debug_, debug_runtime_, device_type_, device_,
+            host_, device_id_, is_training_);
       },
       py::arg("opt_level") = 2,
       py::arg("strict") = false,
@@ -37,7 +41,9 @@ PYBIND11_MODULE(_torch_tvm, m) {
       py::arg("debug_runtime") = false,
       py::arg("device_type") = "cpu",
       py::arg("device") = "llvm -mcpu=core-avx2",
-      py::arg("host") = "llvm -mcpu=core-avx2");
+      py::arg("host") = "llvm -mcpu=core-avx2",
+      py::arg("device_id") = 0,
+      py::arg("is_training") = false);
 
   m.def("disable", []() { fusion_enabled = false; });
 

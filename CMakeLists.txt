@@ -7,7 +7,7 @@ file(GLOB TORCH_TVM_SRCS
   ${CMAKE_CURRENT_SOURCE_DIR}/torch_tvm/custom_tvm_ops/cpp/topi/contrib/*.cc
 )
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS}")
 
 # PYTORCH_DIR

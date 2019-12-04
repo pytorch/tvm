@@ -23,6 +23,8 @@ static bool debug_runtime = false;
 static std::string device_type = "cpu";
 static std::string device = "llvm -mcpu=core-avx2";
 static std::string host = "llvm -mcpu=core-avx2";
+static int device_id = 0;
+static bool is_training_mode = false;
 
 void registerTVMOp() {
   auto options = c10::OperatorOptions();
@@ -31,7 +33,8 @@ void registerTVMOp() {
       getTVMSymbol(),
       [](const torch::jit::Node* node) -> torch::jit::Operation {
         auto cc = std::make_shared<TVMCompiler>(
-            node, opt_level, strict, debug, debug_runtime, device_type, device, host);
+            node, opt_level, strict, debug, debug_runtime, device_type, device,
+            host, device_id);
         return [cc](Stack& stack) {
           RECORD_FUNCTION("TVM", std::vector<c10::IValue>());
           cc->run(stack);
@@ -48,7 +51,9 @@ void set_build_config(
     bool debug_runtime_,
     const std::string& device_type_,
     const std::string& device_,
-    const std::string& host_) {
+    const std::string& host_,
+    int device_id_,
+    bool is_training_) {
   opt_level = opt_level_;
   strict = strict_;
   debug = debug_;
@@ -56,6 +61,12 @@ void set_build_config(
   device_type = device_type_;
   device = device_;
   host = host_;
+  device_id = device_id_;
+  is_training_mode = is_training_;
+}
+
+bool is_training() {
+  return is_training_mode;
 }
 
 void torch_tvm_enable(std::function<bool()> enableTVMCompile) {
@@ -69,7 +80,7 @@ void torch_tvm_enable(std::function<bool()> enableTVMCompile) {
           RemoveDropout(g);
           FuseSupportedOps(g);
         }
-      });
+  });
 }
 
 } // namespace
