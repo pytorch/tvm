@@ -2,6 +2,7 @@
 #include <tvm/relay/attrs/transform.h>
 #include <tvm/relay/transform.h>
 #include <tvm/relay/module.h>
+#include <tvm/runtime/device_api.h>
 #include <tvm/data_layout.h>
 
 #include <torch/csrc/autograd/record_function.h>
@@ -43,7 +44,16 @@ T relayToConstant(tvm::relay::Expr e) {
   // TODO: Better error handling on checking if T is same as
   // c->data->dtype. Unfortunately DLDataType is enum of
   // int, uint and float.
-  return static_cast<T*>(c->data->data)[0];
+
+  T val {0};
+  tvm::runtime::DeviceAPI::Get(c->data->ctx)->CopyDataFromTo(
+      c->data->data, 0,
+      &val, 0,
+      sizeof(val),
+      c->data->ctx,
+      cpuContext(),
+      c->data->dtype, nullptr);
+  return val;
 }
 
 bool isConstant(tvm::relay::Expr e) {
@@ -321,7 +331,7 @@ RegisterTVMOperator::RegisterTVMOperator(std::vector<TVMOpMap> ops) {
         // NB: We assume all relay ops are pure
         auto options = c10::OperatorOptions();
         options.setAliasAnalysis(AliasAnalysisKind::PURE_FUNCTION);
-	      // TODO: Pass in operator options somehow
+        // TODO: Pass in operator options somehow
         auto torch_operator = Operator(
             FunctionSchema(
                 "tvm::" + op.name,
@@ -330,10 +340,10 @@ RegisterTVMOperator::RegisterTVMOperator(std::vector<TVMOpMap> ops) {
                 schema.returns(),
                 false,
                 false),
-	      [cc](Stack& stack) {
-		RECORD_FUNCTION("TVM", std::vector<c10::IValue>());
-		cc->run(stack);
-		return 0;
+            [cc](Stack& stack) {
+              RECORD_FUNCTION("TVM", std::vector<c10::IValue>());
+              cc->run(stack);
+              return 0;
             });
         RegisterOperators torch_register_ops(
             std::vector<Operator>{torch_operator});
@@ -389,9 +399,16 @@ RegisterTVMOperator reg({
        tvm::Array<tvm::relay::Expr> add_inputs = {inputs[0], inputs[1]};
        // Handle pytorch's value argument in add
        auto value = inputs[2].as<tvm::relay::ConstantNode>();
-       TORCH_INTERNAL_ASSERT(
-           value->is_scalar() &&
-           reinterpret_cast<int*>(value->data->data)[0] == 1);
+       int val {0};
+       tvm::runtime::DeviceAPI::Get(value->data->ctx)->CopyDataFromTo(
+           value->data->data, 0,
+           &val, 0,
+           sizeof(val),
+           value->data->ctx,
+           cpuContext(),
+           value->data->dtype, nullptr);
+       TORCH_INTERNAL_ASSERT(value->is_scalar() && val == 1);
+
        auto out = tvm::relay::CallNode::make(op, add_inputs, tvm::Attrs(), {});
        return out;
      }},
@@ -416,9 +433,16 @@ RegisterTVMOperator reg({
        tvm::Array<tvm::relay::Expr> add_inputs = {inputs[0], inputs[1]};
        // Handle pytorch's value argument in add
        auto value = inputs[2].as<tvm::relay::ConstantNode>();
-       TORCH_INTERNAL_ASSERT(
-           value->is_scalar() &&
-           reinterpret_cast<int*>(value->data->data)[0] == 1);
+       int val {0};
+       tvm::runtime::DeviceAPI::Get(value->data->ctx)->CopyDataFromTo(
+           value->data->data, 0,
+           &val, 0,
+           sizeof(val),
+           value->data->ctx,
+           cpuContext(),
+           value->data->dtype, nullptr);
+       TORCH_INTERNAL_ASSERT(value->is_scalar() && val == 1);
+
        auto out = tvm::relay::CallNode::make(op, add_inputs, tvm::Attrs(), {});
        return out;
      }},
@@ -593,7 +617,15 @@ RegisterTVMOperator reg({
        auto x = tvm::runtime::NDArray::Empty(
            {}, tvm::runtime::String2TVMType("float32"), ctx_);
        // Make this large to induce noticeable errors
-       reinterpret_cast<float*>(x->data)[0] = 1337e10;
+       float x_val = 1337e10;
+       tvm::runtime::DeviceAPI::Get(x->ctx)->CopyDataFromTo(
+         &x_val, 0,
+         x->data, 0,
+         sizeof(x_val),
+         cpuContext(),
+         x->ctx,
+         x->dtype, nullptr);
+
        tvm::relay::Expr v = tvm::relay::ConstantNode::make(x);
 
        auto& broadcast = tvm::relay::Op::Get("broadcast_to_like");
@@ -746,7 +778,7 @@ RegisterTVMOperator reg({
        attrs->newshape = relayToArray<tvm::Integer>(inputs[1]);
        TORCH_INTERNAL_ASSERT(attrs->newshape.size() > 0);
        if (static_cast<int64_t>(attrs->newshape[0]) != -1) {
-	       std::cerr << "WARNING: reshape with -1 as the first value has known incompatibility with PyTorch semantics.\n";
+         LOG(WARNING) << "reshape with -1 as the first value has known incompatibility with PyTorch semantics.\n";
        }
        attrs->reverse = false;
        auto out =

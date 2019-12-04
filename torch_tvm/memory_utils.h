@@ -13,9 +13,12 @@ namespace utils {
 
 struct DLManagedTensorDeleter {
   void operator()(DLManagedTensor* manager_ctx) {
-    if (manager_ctx == nullptr)
+    if (manager_ctx == nullptr) {
       return;
+    }
+
     auto dl_tensor = manager_ctx->dl_tensor;
+    TORCH_CHECK(dl_tensor.ctx.device_type == kDLCPU);
     if (dl_tensor.data) {
       TORCH_CHECK((dl_tensor.shape && dl_tensor.strides), "If DLTensor's data"
           " pointer is valid then shape and strides must be as well.")

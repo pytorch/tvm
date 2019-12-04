@@ -1,7 +1,9 @@
 #include "compiler.h"
 #include "operators.h"
+#include "register.h"
 
 #include <ATen/DLConvertor.h>
+#include <torch/csrc/autograd/record_function.h>
 #include <torch/csrc/jit/constants.h>
 #include <torch/csrc/jit/interpreter.h>
 #include <limits>
@@ -13,6 +15,7 @@
 using namespace torch::jit;
 
 using torch_tvm::utils::DLManagedTensorPtr;
+using tvm::runtime::DeviceAPI;
 
 namespace {
 std::vector<DLManagedTensorPtr> set_input(
@@ -34,15 +37,20 @@ std::vector<DLManagedTensorPtr> set_input(
     //auto tensor = ivalue.toTensor().to(at::kFloat);
     auto tensor = ivalue.toTensor();
     DLManagedTensor* dl_tensor;
-    if (tensor.is_contiguous() &&
-        torch_tvm::utils::isAligned(tensor.data_ptr(),
-          tvm::runtime::kAllocAlignment)) {
+    if (tensor.is_contiguous() && (
+        is_training() || torch_tvm::utils::isAligned(tensor.data_ptr(),
+            tvm::runtime::kAllocAlignment))) {
       dl_tensor = at::toDLPack(tensor);
     } else {
-      dl_tensor =
-        torch_tvm::utils::allocAndCopyData(tensor);
-      input_tensors.emplace_back(
-          dl_tensor);
+      if (is_training()) {
+        auto contig_tensor = tensor.contiguous();
+        dl_tensor = at::toDLPack(contig_tensor);
+      } else {
+        dl_tensor =
+          torch_tvm::utils::allocAndCopyData(tensor);
+        input_tensors.emplace_back(
+            dl_tensor);
+      }
     }
     cache.set_input(graph_input.tvm_var_name,
         tvm::runtime::NDArray::FromDLPack(dl_tensor));
@@ -52,7 +60,17 @@ std::vector<DLManagedTensorPtr> set_input(
 
 DLManagedTensorPtr createParamTensor(const IValue& param_val) {
   auto tensor = param_val.toTensor();
-  auto dl_tensor = torch_tvm::utils::allocAndCopyData(tensor);
+  DLManagedTensor* dl_tensor = nullptr;
+  if (is_training()) {
+    if (tensor.is_contiguous()) {
+      dl_tensor = at::toDLPack(tensor);
+    } else {
+      auto contig_tensor = tensor.contiguous();
+      dl_tensor = at::toDLPack(contig_tensor);
+    }
+  } else {
+    dl_tensor = torch_tvm::utils::allocAndCopyData(tensor);
+  }
   return DLManagedTensorPtr(dl_tensor);
 }
 
@@ -60,6 +78,33 @@ tvm::relay::Constant createParamConstant(
     const DLManagedTensorPtr& dl_tensor_ptr) {
   auto nd_array = tvm::runtime::NDArray::FromDLPack(dl_tensor_ptr.get());
   return tvm::relay::ConstantNode::make(nd_array);
+}
+
+template <class T, int size>
+tvm::relay::Expr doubleNode(double d, TVMContext ctx) {
+  TORCH_CHECK(size == 16 || size == 32);
+  std::string type;
+  if (size == 16) {
+    type = "float16";
+  } else {
+    type = "float32";
+  }
+
+  auto x = tvm::runtime::NDArray::Empty(
+      {}, tvm::runtime::String2TVMType(type), ctx);
+  TORCH_CHECK(d <= std::numeric_limits<T>::max());
+  TORCH_CHECK(d >= std::numeric_limits<T>::lowest());
+  T f = static_cast<T>(d);
+
+  DeviceAPI::Get(ctx)->CopyDataFromTo(
+      &f, 0,
+      x->data, 0,
+      size,
+      cpuContext(),
+      ctx,
+      DLDataType{kDLFloat, size, 1}, nullptr);
+
+  return tvm::relay::ConstantNode::make(x);
 }
 
 } // namespace
@@ -91,6 +136,7 @@ tvm::Map<std::string, tvm::relay::Constant>
 
 tvm::relay::DataType scalarTypeToTVMType(at::ScalarType pt_type) {
   static const std::unordered_map<at::ScalarType, tvm::relay::DataType> type_mapping = {
+    {at::ScalarType::Half, ::tvm::Float(16)},
     {at::ScalarType::Float, ::tvm::Float(32)},
     {at::ScalarType::Double, ::tvm::Float(64)},
     {at::ScalarType::Int, ::tvm::Int(32)},
@@ -131,9 +177,6 @@ tvm::relay::Var TVMCompiler::convertToRelay(Value* val, TVMContext ctx) {
     TORCH_INTERNAL_ASSERT(pt_t);
     auto optional_device_type = pt_t->device();
     TORCH_INTERNAL_ASSERT(optional_device_type);
-    auto device_type = optional_device_type.value();
-    AT_CHECK(device_type == at::DeviceType::CPU,
-      "Expected CPU device type but got:", device_type);
     tvm::Array<tvm::relay::IndexExpr> sizes;
     const auto& varying_sizes = pt_t->sizes();
     const auto& optional_sizes = varying_sizes.sizes();
@@ -160,30 +203,39 @@ tvm::relay::Var TVMCompiler::convertToRelay(Value* val, TVMContext ctx) {
 tvm::relay::Expr TVMCompiler::convertToRelay(
     const IValue& val,
     TVMContext ctx) {
-  // All doubles are converted to floats
+  // All doubles are converted to floats/fp16
   if (val.isDouble()) {
-    auto x = tvm::runtime::NDArray::Empty(
-        {}, tvm::runtime::String2TVMType("float32"), ctx);
-    auto d = val.toDouble();
-    TORCH_CHECK(d <= std::numeric_limits<float>::max());
-    TORCH_CHECK(d >= std::numeric_limits<float>::lowest());
-    auto f = static_cast<float>(d);
-    reinterpret_cast<float*>(x->data)[0] = f;
-    auto v = tvm::relay::ConstantNode::make(x);
-    return v;
+    if (is_training()) {
+      return doubleNode<c10::Half, 16>(val.toDouble(), ctx);
+    } else {
+      return doubleNode<float, 32>(val.toDouble(), ctx);
+    }
   }
   // All Ints are converted to int32, which may overflow
   if (val.isInt()) {
     auto x = tvm::runtime::NDArray::Empty({}, tvm::Int(64), ctx);
     auto l = val.toInt();
-    reinterpret_cast<int64_t*>(x->data)[0] = l;
+    DeviceAPI::Get(ctx)->CopyDataFromTo(
+        &l, 0,
+        x->data, 0,
+        sizeof(l),
+        cpuContext(),
+        ctx,
+        DLDataType{kDLInt, 64, 1}, nullptr);
     auto v = tvm::relay::ConstantNode::make(x);
     return v;
   }
   if (val.isBool()) {
     auto x = tvm::runtime::NDArray::Empty(
         {}, tvm::runtime::String2TVMType("bool"), ctx);
-    reinterpret_cast<bool*>(x->data)[0] = val.toBool();
+    auto b = val.toBool();
+    DeviceAPI::Get(ctx)->CopyDataFromTo(
+        &b, 0,
+        x->data, 0,
+        sizeof(b),
+        cpuContext(),
+        ctx,
+        DLDataType{kDLUInt, 64, 1}, nullptr);
     auto v = tvm::relay::ConstantNode::make(x);
     return v;
   }
@@ -192,7 +244,14 @@ tvm::relay::Expr TVMCompiler::convertToRelay(
   if (val.isNone()) {
     auto x = tvm::runtime::NDArray::Empty(
         {}, tvm::runtime::String2TVMType("uint64"), ctx);
-    reinterpret_cast<uint64_t*>(x->data)[0] = getNoneSentinel();
+    auto n = getNoneSentinel();
+    DeviceAPI::Get(ctx)->CopyDataFromTo(
+        &n, 0,
+        x->data, 0,
+        sizeof(n),
+        cpuContext(),
+        ctx,
+        DLDataType{kDLUInt, 64, 1}, nullptr);
     auto v = tvm::relay::ConstantNode::make(x);
     return v;
   }
@@ -200,7 +259,13 @@ tvm::relay::Expr TVMCompiler::convertToRelay(
     tvm::Array<tvm::relay::Expr> tuple_elems;
     for (const auto& elem : val.toIntList()) {
       auto x = tvm::runtime::NDArray::Empty({}, tvm::Int(64), ctx);
-      reinterpret_cast<int64_t*>(x->data)[0] = elem;
+      DeviceAPI::Get(ctx)->CopyDataFromTo(
+          &elem, 0,
+          x->data, 0,
+          sizeof(elem),
+          cpuContext(),
+          ctx,
+          DLDataType{kDLInt, 64, 1}, nullptr);
       auto v = tvm::relay::ConstantNode::make(x);
       tuple_elems.push_back(v);
     }
@@ -335,6 +400,16 @@ tvm::relay::Function TVMCompiler::convertToRelay(
       input_vars, output, tvm::relay::Type(), {});
 }
 
+std::string TVMCompiler::getTVMCompilerHandle(
+    std::shared_ptr<torch::jit::Graph> subgraph) {
+  std::ostringstream oss;
+  oss << "TVM";
+  for (const auto& n : subgraph->nodes()) {
+    oss << "_" << n->kind().toUnqualString();
+  }
+  return oss.str();
+}
+
 TVMCompiler::TVMCompiler(
     const Node* node,
     int opt_level,
@@ -343,21 +418,26 @@ TVMCompiler::TVMCompiler(
     bool debug_runtime,
     std::string device_type,
     std::string device,
-    std::string host)
+    std::string host,
+    int device_id)
     : opt_level_(opt_level),
       strict_(strict),
       debug_(debug),
       debug_runtime_(debug_runtime),
       device_type_(device_type),
       device_(device),
-      host_(host) {
+      host_(host),
+      device_id_(device_id) {
   if (device_type_ == "gpu") {
     ctx_.device_type = kDLGPU;
   } else {
     ctx_.device_type = kDLCPU;
   }
-  ctx_.device_id = 0;
+  ctx_.device_id = device_id_;
   subgraph_ = node->g(attr::Subgraph);
+  handle_str_ = getTVMCompilerHandle(subgraph_);
+  fallback_interpreter_ = std::unique_ptr<torch::jit::InterpreterState>(
+      new torch::jit::InterpreterState(Code(subgraph_)));
   auto pfb = tvm::runtime::Registry::Get("relay.build_module._BuildModule");
   TORCH_INTERNAL_ASSERT(pfb);
   build_mod_ = (*pfb)();
@@ -368,13 +448,31 @@ void TVMCompiler::run(Stack& stack) {
   std::unordered_map<Value*, IValue> value_to_ivalue;
   int num_inputs = subgraph_->inputs().size();
   at::ArrayRef<IValue> inputs = last(stack, num_inputs);
+  CompleteArgumentSpec spec{false, ArrayRef<IValue>(inputs)};
 
-  for (auto i = 0; i < inputs.size(); ++i) {
-    auto value_input = subgraph_->inputs()[i];
-    value_to_ivalue[value_input] = inputs[i];
+  if (bad_specs_.count(spec)) {
+    fallback_interpreter_->run(stack);
+    return;
   }
 
-  CompleteArgumentSpec spec{false, ArrayRef<IValue>(inputs)};
+  if (is_training()) {
+    bool is_all_cuda = true;
+    for (auto i = 0; i < inputs.size(); ++i) {
+      auto value_input = subgraph_->inputs()[i];
+      value_to_ivalue[value_input] = inputs[i];
+      if (inputs[i].isTensor()) {
+        if (!inputs[i].toTensor().device().is_cuda()) {
+          is_all_cuda = false;
+        }
+      }
+    }
+
+    if (!is_all_cuda) {
+      bad_specs_.insert(spec);
+      fallback_interpreter_->run(stack);
+      return;
+    }
+  }
 
   if (cache_.find(spec) == cache_.end()) {
     for (auto& kv : value_to_ivalue) {
@@ -382,13 +480,17 @@ void TVMCompiler::run(Stack& stack) {
         kv.first->inferTypeFrom(kv.second.toTensor());
       } else if (kv.second.isInt()) {
         kv.first->setType(IntType::get());
+      } else if (kv.second.isDouble()) {
+        kv.first->setType(FloatType::get());
       } else {
-        AT_CHECK(
-            0,
-            "Cannot handle this type yet ",
-            kv.second,
-            "\nGraph:\n",
-            *subgraph_);
+        LOG(ERROR) << "Cannot handle this type yet "
+                   << kv.second
+                   << "\nGraph:\n"
+                   << *subgraph_
+                   << " (this: " << ((void*)this) << ")";
+        fallback_interpreter_->run(stack);
+        bad_specs_.insert(spec);
+        return;
       }
     }
 
@@ -403,6 +505,8 @@ void TVMCompiler::run(Stack& stack) {
     try {
       tvm_func = convertToRelay(subgraph_, ctx_, &cache_[spec].input_values);
     } catch (const std::exception& e) {
+      cache_.erase(spec);
+      bad_specs_.insert(spec);
       if (strict_) {
         AT_ERROR(
             "Pytorch TVM: fail to convert to relay, exception: ", e.what());
@@ -410,7 +514,7 @@ void TVMCompiler::run(Stack& stack) {
       LOG(WARNING)
           << "Pytorch TVM: fail to convert to relay, falling back to JIT for execution, exception: "
           << e.what() << "\n";
-      InterpreterState(Code(subgraph_)).run(stack);
+      fallback_interpreter_->run(stack);
       return;
     }
     auto build_f = build_mod_.GetFunction("build", false);
@@ -428,7 +532,7 @@ void TVMCompiler::run(Stack& stack) {
     // being partitioned in non-divisible factors it will partition
     // it in divisible part and tail that is not divible.
     // This help performance.
-    build_config->partition_const_loop = true;
+    build_config->partition_const_loop = false;
     build_f(tvm_func, target_map, tvm::Target::Create(host_));
     tvm::runtime::Module mod = mod_f();
     std::string json = json_f();
@@ -436,6 +540,7 @@ void TVMCompiler::run(Stack& stack) {
       getDebugLogger().printLoweredFuncs(build_mod_);
       getDebugLogger().printASM(mod);
     }
+
 #ifdef TVM_USE_FB_GRAPH_RUNTIME
     auto pfr = tvm::runtime::Registry::Get("tvm.fb_graph_runtime.create");
 #else
@@ -451,6 +556,7 @@ void TVMCompiler::run(Stack& stack) {
     tvm::runtime::Module run_mod =
         (*pfr)(json, mod, (int)ctx_.device_type, (int)ctx_.device_id);
     cache_[spec].set_input = run_mod.GetFunction("set_input_zero_copy", false);
+
     if (debug_runtime_) {
         cache_[spec].kernel = run_mod.GetFunction("run_individual", false);
     } else {
@@ -486,10 +592,13 @@ void TVMCompiler::run(Stack& stack) {
   std::vector<DLManagedTensorPtr> dl_tensor_list =
     set_input(value_to_ivalue, cache_[spec]);
 
-  if (debug_runtime_) {
+  {
+    RECORD_FUNCTION(handle_str_, last(stack, num_inputs));
+    if (debug_runtime_) {
       cache_[spec].kernel(10, 10, 1);
-  } else {
+    } else {
       cache_[spec].kernel();
+    }
   }
 
   // clean the stack and add outputs to the stack
