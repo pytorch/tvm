@@ -44,3 +44,5 @@ struct RegisterTVMOperatorSchedule {
   RegisterTVMOperatorSchedule(
       std::vector<std::pair<std::string, TVMScheduleFunctor>> scheds);
 };
+
+TVMContext cpuContext();

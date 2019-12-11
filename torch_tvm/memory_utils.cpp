@@ -12,6 +12,7 @@ bool isAligned(void* data_ptr, std::uintptr_t alignment_in_bytes) {
 }
 
 DLManagedTensor* allocAndCopyData(const at::Tensor& tensor) {
+  TORCH_CHECK(tensor.device().is_cpu());
   DLManagedTensor* dl_managed_tensor = new DLManagedTensor();
   auto contig_tensor = tensor;
   if (!tensor.is_contiguous()) {
