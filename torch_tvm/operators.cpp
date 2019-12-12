@@ -17,6 +17,7 @@
 #include "compiler.h"
 #include "fusion_pass.h" // tvm_sym
 #include "operators.h"
+#include "register.h"
 
 using namespace torch::jit;
 
@@ -203,7 +204,8 @@ tvm::relay::Expr lowerFbgemmLinearInt8Acc32FP32(tvm::Array<tvm::relay::Expr> inp
   return tvm::relay::CallNode::make(bias_add_op, {mm, inputs[6]}, tvm::Attrs(bias_add_attrs), {});
 }
 
-tvm::relay::Expr lowerLinear(tvm::Array<tvm::relay::Expr> inputs) {
+tvm::relay::Expr lowerLinear(
+    tvm::Array<tvm::relay::Expr> inputs, bool weight_transposed = false) {
   const auto input0_type = getExprType(inputs[0]);
   const auto input1_type = getExprType(inputs[1]);
 
@@ -236,24 +238,41 @@ tvm::relay::Expr lowerLinear(tvm::Array<tvm::relay::Expr> inputs) {
   TORCH_CHECK((batch_dim0 == batch_dim1),
       "Input and weight must have same value in batch dim.");
 
-  //TODO: Right now custom dense is only supported for cpu target.
-  //Any other target will likely break, e.g. arm_cpu.
-  //Future fix.
   tvm::relay::Expr out;
-  out = getCustomDense(reshaped_input, inputs[1]);
+  if (!tvm::is_training()) {
+    TORCH_CHECK(!weight_transposed);
+    //TODO: Right now custom dense is only supported for cpu target.
+    //Any other target will likely break, e.g. arm_cpu.
+    //Future fix.
+    out = getCustomDense(reshaped_input, inputs[1]);
+  } else {
+    auto dense_attrs = tvm::make_node<tvm::relay::DenseAttrs>();
+    dense_attrs->transposed = weight_transposed;
+    out = tvm::relay::CallNode::make(
+        tvm::relay::Op::Get("nn.dense"),
+        {reshaped_input, inputs[1]},
+        tvm::Attrs(dense_attrs),
+        {});
+  }
 
   if (shape0.size() > 2) {
     auto attrs = tvm::make_node<tvm::relay::ReshapeAttrs>();
     for (int64_t i = 0;i < shape0.size() - 1; ++i) {
       attrs->newshape.push_back((shape0[i].as<tvm::IntImm>())->value);
     }
-    attrs->newshape.push_back((shape1[0].as<tvm::IntImm>())->value);
+    int newshape_dim = -1;
+    if (weight_transposed) {
+      newshape_dim = (shape1[1].as<tvm::IntImm>())->value;
+    } else {
+      newshape_dim = (shape1[0].as<tvm::IntImm>())->value;
+    }
+    attrs->newshape.push_back(newshape_dim);
     attrs->reverse = false;
     auto op = tvm::relay::Op::Get("reshape");
     out = tvm::relay::CallNode::make(op, {out}, tvm::Attrs(attrs), {});
   }
 
-  if (!relayIsNone(inputs[2])) {
+  if (inputs.size() > 2 && !relayIsNone(inputs[2])) {
     const auto input2_type = getExprType(inputs[2]);
     auto shape2 = input2_type.shape;
     TORCH_CHECK(shape2.size() == 1, "Bias input must be 1 dim.");
@@ -797,6 +816,11 @@ RegisterTVMOperator reg({
        return lowerLinear(inputs);
      },
      "", PARAM_INDICES(linear)},
+     {Symbol::fromQualString("aten::matmul"),
+      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+        return lowerLinear(inputs, true);
+      },
+      "", PARAM_INDICES(matmul)},
      {Symbol::fromQualString("aten::softmax"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        auto softmax_op = tvm::relay::Op::Get("nn.softmax");

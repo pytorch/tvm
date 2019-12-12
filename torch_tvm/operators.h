@@ -6,6 +6,7 @@
 #define PARAM_INDICES_convolution {1, 2}
 #define PARAM_INDICES_layer_norm {2, 3}
 #define PARAM_INDICES_linear {1, 2}
+#define PARAM_INDICES_matmul {1}
 #define PARAM_INDICES_quantized_linear {1, 3, 6}
 
 #define PARAM_INDICES(op_name) PARAM_INDICES_##op_name

@@ -11,6 +11,7 @@
 #include "fuse_linear.h"
 #include "fusion_pass.h"
 #include "remove_dropout.h"
+#include "replace_single_ops.h"
 
 namespace tvm {
 namespace {
@@ -79,6 +80,9 @@ void torch_tvm_enable(std::function<bool()> enableTVMCompile) {
           FuseConcat(g);
           RemoveDropout(g);
           FuseSupportedOps(g);
+          if (is_training()) {
+            ReplaceSingleOps(g);
+          }
         }
   });
 }
