@@ -446,8 +446,13 @@ void TVMCompiler::run(Stack& stack) {
   std::unordered_map<Value*, IValue> value_to_ivalue;
   int num_inputs = subgraph_->inputs().size();
   at::ArrayRef<IValue> inputs = last(stack, num_inputs);
-  CompleteArgumentSpec spec{false, ArrayRef<IValue>(inputs)};
 
+  for (auto i = 0; i < inputs.size(); ++i) {
+    auto value_input = subgraph_->inputs()[i];
+    value_to_ivalue[value_input] = inputs[i];
+  }
+
+  CompleteArgumentSpec spec{false, ArrayRef<IValue>(inputs)};
   if (bad_specs_.count(spec)) {
     fallback_interpreter_->run(stack);
     return;
@@ -456,8 +461,6 @@ void TVMCompiler::run(Stack& stack) {
   if (tvm::is_training()) {
     bool is_all_cuda = true;
     for (auto i = 0; i < inputs.size(); ++i) {
-      auto value_input = subgraph_->inputs()[i];
-      value_to_ivalue[value_input] = inputs[i];
       if (inputs[i].isTensor()) {
         if (!inputs[i].toTensor().device().is_cuda()) {
           is_all_cuda = false;
