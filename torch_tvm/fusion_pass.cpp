@@ -48,6 +48,21 @@ bool canHandle(Block* block, AliasDb& aliasDb) {
     GRAPH_DEBUG("Failed cond " #cond "\n"); \
     return c10::nullopt;                    \
   }
+
+c10::optional<Node*> tryLower(Node* node, AliasDb& aliasDb) {
+  GRAPH_DEBUG("Trying to lower node ", node->kind().toQualString(), ":\n");
+  // Already converted so return no change
+  REQ(node->kind() != getTVMSymbol() && !node->hasAttribute(attr::Subgraph));
+  REQ(canHandle(node, aliasDb));
+
+  if (!aliasDb.isMutable(node)) {
+    REQ(!aliasDb.hasOutputWriters(node));
+  }
+  // proceed to convert current node to TVM
+  node = SubgraphUtils::createSingletonSubgraph(node, getTVMSymbol());
+  return node;
+}
+
 c10::optional<Node*> tryMerge(
     Node* consumer,
     Node* producer,
@@ -61,7 +76,7 @@ c10::optional<Node*> tryMerge(
 
   // Symbolic checks
   REQ(canHandle(producer, aliasDb));
-  REQ((canHandle(consumer, aliasDb) || consumer->kind() == getTVMSymbol()));
+  REQ(consumer->kind() == getTVMSymbol());
 
   // Alias checks
   // Requirement:
@@ -83,10 +98,6 @@ c10::optional<Node*> tryMerge(
     }
   }
 
-  if (!consumer->hasAttribute(attr::Subgraph) &&
-      consumer->kind() != getTVMSymbol()) {
-    consumer = SubgraphUtils::createSingletonSubgraph(consumer, getTVMSymbol());
-  }
   if (producer->kind() == prim::Constant) {
     auto& subgraph = consumer->g(attr::Subgraph);
     Node* in_const = subgraph->createClone(producer, [](Value*) -> Value* {
@@ -107,6 +118,11 @@ std::pair<graph_node_list::iterator, bool> scanNode(
     Block* block) {
   auto inputs = sortReverseTopological(consumer->inputs(), block);
   for (auto input : inputs) {
+    if(auto group = tryLower(consumer, aliasDb)) {
+        // we successfully lowered,
+        // rescan the new group for merging opportunities
+        return {group.value()->reverseIterator(), true};
+    }
     if (auto group = tryMerge(consumer, input->node(), aliasDb)) {
       // we successfully merged, so the new group's `inputs` may have
       // changed. So rescan the new group for more merging opportunities.
