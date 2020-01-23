@@ -395,6 +395,20 @@ class TestOperators(TVMTest):
         assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
 
     @TVMTest.given(
+        shape=TVMTest.rand_shape(rank=3, min_dim=4),
+        out_features=TVMTest.rand_int(3, 6),
+    )
+    def test_bmm(self, shape, out_features):
+        input = torch.rand(shape)
+        weight = torch.rand(shape[0], shape[-1], out_features)
+
+        def bmm(input, weight):
+            return torch.bmm(input, weight) + 2.0
+
+        ref_out, tvm_out = self.runBoth(bmm, input, weight)
+        assert torch.allclose(ref_out, tvm_out, rtol=0.01, atol=0.01)
+
+    @TVMTest.given(
         shape=TVMTest.rand_shape(rank=2, min_dim=4),
     )
     def test_reshape(self, shape):

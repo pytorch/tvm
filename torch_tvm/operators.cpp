@@ -792,6 +792,26 @@ RegisterTVMOperator reg({
            tvm::relay::CallNode::make(op, {inputs[0]}, tvm::Attrs(attrs), {});
        return out;
      }},
+    {Symbol::fromQualString("aten::bmm"),
+     [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
+       TORCH_INTERNAL_ASSERT(inputs.size()==2);
+
+       auto transpose_attrs = tvm::make_node<tvm::relay::TransposeAttrs>();
+       auto& axes = transpose_attrs->axes;
+       axes.push_back(0);
+       axes.push_back(2);
+       axes.push_back(1);
+
+       auto transposed_weight = tvm::relay::CallNode::make(
+           tvm::relay::Op::Get("transpose"),
+           {inputs[1]}, tvm::Attrs(transpose_attrs), {});
+
+       auto out = tvm::relay::CallNode::make(
+           tvm::relay::Op::Get("nn.batch_matmul"),
+           {inputs[0], transposed_weight}, {}, {});
+
+       return out;
+     }},
     {Symbol::fromQualString("aten::linear"),
      [](Node* node, tvm::Array<tvm::relay::Expr> inputs) {
        return lowerLinear(inputs);
